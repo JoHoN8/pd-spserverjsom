@@ -2070,9 +2070,9 @@ pbkdf2@^3.0.3:
     safe-buffer "^5.0.1"
     sha.js "^2.4.8"
 
-pd-sputil@^2.0.2:
-  version "2.0.2"
-  resolved "https://registry.yarnpkg.com/pd-sputil/-/pd-sputil-2.0.2.tgz#8c4b7cbebd1585e6b447793afd6323c6ee676a1c"
+pd-sputil@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/pd-sputil/-/pd-sputil-2.1.0.tgz#a46701826a09ad117368d3dafe07bc5c00df9520"
   dependencies:
     jquery "^3.2.1"
 
