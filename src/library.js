@@ -355,3 +355,311 @@ export function jsomListItemDataExtractor(listItemCollection) {
     
     return jsomToObj(listItemCollection);
 }
+api.jsomCUD = (function() {
+	// v 1.1
+	// it based off jsom
+	//by Jed
+	//08/16/16
+	var privateAPI = {
+		sPoint: SP,
+		setItemValues: function(context, list, item, columnInfoObj) {
+			var toServerValue,
+				toServerType,
+				columnName,
+				columnValue,
+				taxColObj,
+				taxField;
+
+			for (columnName in columnInfoObj) {
+				if (columnInfoObj.hasOwnProperty(columnName)) {
+					//default 
+					toServerValue = columnInfoObj[columnName].value;
+					toServerType = api.getDataType(toServerValue);
+
+					if (toServerType === '[object Object]' && toServerValue !== undefined) {
+						//for comparison and constructing toServer
+						columnValue = columnInfoObj[columnName].value;
+
+						if (columnValue.termGuid || columnValue.termGuid === null) {
+							//single metadata, {termLabel: , termGuid:}
+							var taxonomySingle;
+
+							taxColObj = list.get_fields().getByInternalNameOrTitle(columnName);
+							taxField = context.castTo(taxColObj, privateAPI.sPoint.Taxonomy.TaxonomyField);
+							
+							if (columnValue.termGuid === null) {
+								//there is no value
+								taxonomySingle = null;
+								taxField.validateSetValue(item, taxonomySingle);
+							} else {
+								//there is a value
+								taxonomySingle = new privateAPI.sPoint.Taxonomy.TaxonomyFieldValue();
+								taxonomySingle.set_label(columnValue.termLabel);
+								taxonomySingle.set_termGuid(columnValue.termGuid);
+								taxonomySingle.set_wssId(-1);
+								taxField.setFieldValueByValue(item, taxonomySingle);
+							}
+							continue;
+						}
+						else if (columnValue.multiTerms) {
+							//multi metadata, {multiTerms: [{label: '', guid: ''}, {label: '', guid: ''}]}
+							taxColObj = list.get_fields().getByInternalNameOrTitle(columnName);
+							taxField = context.castTo(taxColObj, privateAPI.sPoint.Taxonomy.TaxonomyField);
+
+							var termPrep = columnValue.multiTerms.map(privateAPI.multiTerms);
+
+							var terms = new privateAPI.sPoint.Taxonomy.TaxonomyFieldValueCollection(termPrep.join(';#'),taxField);
+
+							taxField.setFieldValueByValueCollection(item, terms);
+							continue;
+						}
+						else if (columnValue.choices) {
+							//multi choice, {choices: [1,2,3]}
+							toServerValue = columnValue.choices;
+						}
+						else if (columnValue.itemId) {
+							//single lookup, {itemId: number}
+							toServerValue = new privateAPI.sPoint.FieldLookupValue();
+							toServerValue.set_lookupId(columnValue.itemId);
+						}
+						else if (columnValue.idArray) {
+							//multi lookup, {idArray: [1,2,3,4]}
+							toServerValue = columnValue.idArray.map(privateAPI.multiLookup);
+						}
+						else if (columnValue.acct) {
+							//person field single, {acct: }  acct can be email or account name
+							toServerValue = privateAPI.sPoint.FieldUserValue.fromUser(columnValue.acct);
+						}
+						else if (columnValue.acctArray) {
+							//multi person field, {acctArray: [acct, acct,acct]}  acct can be email or account name
+							toServerValue = columnValue.acctArray.map(privateAPI.multiPerson);
+						}
+						else if (columnValue.url) {
+							//picture of hyperlink, {url: , description: }
+							toServerValue = new privateAPI.sPoint.FieldUrlValue();
+							toServerValue.set_url(columnValue.url);
+							toServerValue.set_description(columnValue.description);
+						}
+					}
+					item.set_item(columnName, toServerValue);
+				}
+			}
+		},
+		multiLookup: function(item) {
+			var lookupValue = new privateAPI.sPoint.FieldLookupValue();
+			return lookupValue.set_lookupId(item);
+		},
+		multiTerms: function(termInfo) {
+			//-1;#Mamo|10d05b55-6ae5-413b-9fe6-ff11b9b5767c
+			return "-1;#" + termInfo.label + "|" +termInfo.guid;  
+		},
+		multiPerson: function(item) {
+
+			return privateAPI.sPoint.FieldUserValue.fromUser(item);
+		},
+		itemLoad: function(context, item, serverArray, currentIndex) {
+			item.update();
+			serverArray[currentIndex] = item;
+			context.load(serverArray[currentIndex]);
+		},
+		callByType: function(list, data, action) {
+			var dataType = api.getDataType(data),
+				currentId,
+				total,
+				ii;
+
+			if (dataType === '[object Array]') {
+				total = data.length;
+				for (ii = 0; ii < total; ii++) {
+					currentId = data[ii];
+					if (action === 'delete') {
+						privateAPI.deleteItems(list, currentId);
+					}
+					if (action === 'recycle') {
+						privateAPI.recycleItems(list, currentId);
+					}
+				}
+			}
+			if (dataType === '[object Number]' && action === 'delete') {
+				privateAPI.deleteItems(list, data);
+			}
+			if (dataType === '[object Number]' && action === 'recycle') {
+				privateAPI.recycleItems(list, data);
+			}
+		},
+		deleteItems: function(list, itemId) {
+			var listItem = list.getItemById(itemId);  
+			listItem.deleteObject();
+		},
+		recycleItems: function(list, itemId) {
+			var listItem = list.getItemById(itemId);  
+			listItem.recycle();
+		},
+	};
+	return {
+		columnType: {
+			slt: 'Single line of text',
+			mlt: 'Multiple lines of text',
+			num: 'Number',
+			currency: 'Currency',
+			date: 'Date and Time',
+			choice: 'Choice',
+			metadata: 'Managed Metadata',
+			person: 'Person or Group',
+			contentType: 'Content Type',
+			yesNo: 'Yes/No',
+			lookup: 'Lookup'
+		},
+		//this sets the value of the column
+		ValuePrep: function(type, value) {
+			//this function ensures values in fields are what the SP server expects
+			//validation happens before you get here
+			// Single line of text
+			// Multiple lines of text
+			// Number
+			// Currency
+			// Date and Time
+			// Choice
+			// Managed Metadata
+			// Person or Group
+			// Content Type
+			// Yes/No
+			// Lookup
+			var valueConst = api.jsomCUD.ValuePrep;
+			if (!(this instanceof valueConst)) {
+				return new valueConst(type, value);
+			}
+			this.type = type;
+			this.value = value;
+		},
+		PrepClientData: function(action, info, itemId) {
+			//action is create, delete or recycle, update
+			// info is object {
+			// 	columnName: instance of valueprep
+			// }
+			var clientConst = api.jsomCUD.PrepClientData;
+
+			if (!(this instanceof clientConst)) {
+				return new clientConst(action, info, itemId);
+			}
+
+			this.action = action;
+			if (info) {
+				this.columnInfo = info;
+			}
+			if (itemId) {
+				this.itemId = itemId;
+			}
+		},
+		prepServerData: function(listGUID, siteURL, serverRequest) {
+			/*
+				serverRequest should be an array of objects
+				{
+					action: 'update',
+					itemId: 3,
+					columnInfo: {
+						columnName: Valueprep instance,
+						columnName: object
+					}
+				}
+			*/
+			var requestType = api.getDataType(serverRequest),
+				toServer,
+				totalItemsForServer,
+				ii,
+				currentObj,
+				listItem,
+				itemInfo,
+				list,
+				action;
+			
+			if (requestType === '[object Array]') {
+				toServer = {};
+				toServer.itemArray = [];
+				totalItemsForServer = serverRequest.length;
+
+				if (siteURL) {
+					toServer.context = new privateAPI.sPoint.ClientContext(siteURL);
+				} else {
+					toServer.context = new privateAPI.sPoint.ClientContext.get_current();
+				}
+
+				if (privateAPI.sPoint.Guid.isValid(listGUID)) {
+					list = toServer.context.get_web().get_lists().getById(listGUID);
+				} else {
+					list = toServer.context.get_web().get_lists().getByTitle(listGUID);
+				}
+
+				// create update
+				for (ii = 0; ii < totalItemsForServer; ii++) {
+					currentObj = serverRequest[ii];
+
+					action = currentObj.action;
+					if (!action) {
+						// if no action throw error
+						api.issue("Server Request with no action!");
+					}
+
+					action = action.toLowerCase();
+
+					if (action === 'delete' || action === 'recycle') {
+						// delete Items
+						// {
+						//     action: 'delete' or 'recycle',
+						//     itemId: [1,2,3,4] or 3
+						// }
+
+						if (!currentObj.itemId) {
+							api.issue("You can not delete/remove items without an ID!");
+						}
+						privateAPI.callByType(list, currentObj.itemId, action);
+						continue;
+					}
+					if (action === 'create') {
+						//exp serverRequest 
+						// [
+						//     {
+						//         action: 'create',
+						//         columnInfo: {
+						//             column1: 'a slt field',
+						//             column2: {termLabel: 'florida', termguid: '123-122-3244-234235-3423'}
+						//         }
+						//     }
+						// ]
+						listItem = list.addItem(new privateAPI.sPoint.ListItemCreationInformation());
+						itemInfo = currentObj.columnInfo;
+					}
+					if (action === 'update') {
+						//for updat exp serverRequest should be an array of objs [{itemid: number, columnInfo: {},{itemid: number, columnInfo: {}] 
+						// [
+						//     {
+						//         itemId: 2,
+						//         action: 'update'
+						//         columnInfo: {
+						//             column1: 'a slt field',
+						//             column2: {termLabel: 'florida', termguid: '123-122-3244-234235-3423'}
+						//     }
+						// ]
+
+						if (!currentObj.itemId) {
+							api.issue('You can not update a list item without an ID!');
+						}
+
+						listItem = list.getItemById(currentObj.itemId);
+						itemInfo = currentObj.columnInfo;
+					}
+					privateAPI.setItemValues(toServer.context, list, listItem, itemInfo);
+					privateAPI.itemLoad(toServer.context, listItem, toServer.itemArray, ii);
+				}
+			} else if (requestType === '[object Object]') {
+				//if an object is passed  recurse with serverRequest correted
+				return api.jsomCUD.prepServerData(listGUID, siteURL, [serverRequest]);
+			} else {
+				//error
+				api.issue("Incorrect serverRequest data type.");
+			}
+
+			return toServer;    
+		}
+	};
+})();
