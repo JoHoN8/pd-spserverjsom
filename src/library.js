@@ -1,359 +1,493 @@
 /**
-    app name pd-spserverjsom
-    need to import ajax and use with getUserData
+	app name pd-spserverjsom
+	need to import ajax and use with getUserData
  */
 import * as $ from 'jquery';
-import {loadSPScript} from 'pd-sputil';
+import {loadSPScript,
+	validGuid,
+	waitForScriptsReady,
+	getDataType
+} from 'pd-sputil';
 
-const waitForScriptsReady = function(scriptName) {
-    var def = $.Deferred();
-
-    ExecuteOrDelayUntilScriptLoaded(function() {
-        return def.resolve('Ready');
-    }, scriptName);
-
-    return def.promise();
-};
 const clearRequestDigest = function() {
-    //this function was to clear the web manager when a taxonomy field was on the dom and you couldnt use jsom across site collections
-    //the issue seems to be fixed 7/26/16 and i am commenting out the places where it is call in this file
-    var manager = Sys.Net.WebRequestManager;
-    if (manager._events !== null &&
-        manager._events._list !== null) { 
-        var invokingRequests = manager._events._list.invokingRequest; 
+	//this function was to clear the web manager when a taxonomy field was on the dom and you couldnt use jsom across site collections
+	//the issue seems to be fixed 7/26/16 and i am commenting out the places where it is call in this file
+	var manager = Sys.Net.WebRequestManager;
+	if (manager._events !== null &&
+		manager._events._list !== null) { 
+		var invokingRequests = manager._events._list.invokingRequest; 
 
-        while( invokingRequests !== null && invokingRequests.length > 0) 
-        { 
-            manager.remove_invokingRequest(invokingRequests[0]); 
-        } 
-    }
-};
-const jsomToObj = function(spItemCollection) {
-    var cleanArray = [],
-        itemsToTranform;
-
-    if (spItemCollection.context) {
-        itemsToTranform = spItemCollection.listItems;
-    } else {
-        itemsToTranform = spItemCollection;
-    }
-
-    if (itemsToTranform.getEnumerator) {
-        var enumerableResponse = itemsToTranform.getEnumerator();
-
-        while (enumerableResponse.moveNext()) {
-            cleanArray.push(
-                enumerableResponse.get_current().get_fieldValues()
-            );
-        }
-
-        return cleanArray;
-    }
-
-    itemsToTranform.forEach(function(item) {
-        cleanArray.push(item.get_fieldValues());
-    });
-    return cleanArray;
+		while( invokingRequests !== null && invokingRequests.length > 0) 
+		{ 
+			manager.remove_invokingRequest(invokingRequests[0]); 
+		} 
+	}
 };
 
 export function jsomGetDataFromSearch(props, currentResults) {
-    // props {
-    //     url: ,
-    //     properties: []
-    //     query: "EmpPositionNumber=\""+ posNumber + "\"",
-    //     sourceId: ,
-    //     trimDuplicates: optional,
-    //     rowLimit: optional,
-    //     startRow: optional,
-    // }
+	// props {
+	//     url: ,
+	//     properties: []
+	//     query: "EmpPositionNumber=\""+ posNumber + "\"",
+	//     sourceId: ,
+	//     trimDuplicates: optional,
+	//     rowLimit: optional,
+	//     startRow: optional,
+	// }
 
-    let scriptCheck = null;
-    let allResults = currentResults || [];
-    let glob = Microsoft.SharePoint.Client;
-    if(glob && glob.Search) {
-        scriptCheck = $.Deferred().resolve();
-    } else {
-        scriptCheck = loadSPScript("SP.Search.js");
-    }
+	let scriptCheck = null;
+	let allResults = currentResults || [];
+	let glob = Microsoft.SharePoint.Client;
+	if(glob && glob.Search) {
+		scriptCheck = $.Deferred().resolve();
+	} else {
+		scriptCheck = loadSPScript("SP.Search.js");
+	}
 
-    return scriptCheck.then(function() {
+	return scriptCheck.then(function() {
 
-        let clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
+		let clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+			keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
 
-        if(!props.startRow) {
+		if(!props.startRow) {
 			props.startRow = 0;
 		}
-        if(!props.rowLimit) {
-            props.rowLimit = 250
-        }
+		if(!props.rowLimit) {
+			props.rowLimit = 250
+		}
 
-        keywordQuery.set_queryText(props.query);
-        keywordQuery.set_sourceId(props.sourceId);
-        keywordQuery.set_trimDuplicates(props.trimDuplicates || false);
-        keywordQuery.set_startRow(props.startRow);
-        keywordQuery.set_rowLimit(props.rowLimit);
+		keywordQuery.set_queryText(props.query);
+		keywordQuery.set_sourceId(props.sourceId);
+		keywordQuery.set_trimDuplicates(props.trimDuplicates || false);
+		keywordQuery.set_startRow(props.startRow);
+		keywordQuery.set_rowLimit(props.rowLimit);
 
-        if(props.properties) {
-            let propertiesObj = keywordQuery.get_selectProperties();
-            props.properties.forEach(item => {propertiesObj.add(item);});
-        }
-        let searchExecute = new Microsoft.SharePoint.Client.Search.Query.SearchExecutor(clientContext);
-        let results = searchExecute.executeQuery(keywordQuery);
+		if(props.properties) {
+			let propertiesObj = keywordQuery.get_selectProperties();
+			props.properties.forEach(item => {propertiesObj.add(item);});
+		}
+		let searchExecute = new Microsoft.SharePoint.Client.Search.Query.SearchExecutor(clientContext);
+		let results = searchExecute.executeQuery(keywordQuery);
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            results: results
-        });
-    }).then(function(response) {
-        let tableData = response.results.get_value(),
-		    requestProps = tableData.ResultTables[0],
-		    results = requestProps.ResultRows;
+		return jsomSendDataToServer({
+			context: clientContext,
+			results: results
+		});
+	}).then(function(response) {
+		let tableData = response.results.get_value(),
+			requestProps = tableData.ResultTables[0],
+			results = requestProps.ResultRows;
 
-        allResults = allResults.concat(results.ResultRows);
+		allResults = allResults.concat(results.ResultRows);
 
-        if(requestProps.TotalRows > (props.startRow + requestProps.RowCount)) {
-            props.startRow = props.startRow + requestProps.RowCount;
-            return jsomGetDataFromSearch(props, allResults);
-        } else {
-            return allResults;
-        }
-    });
+		if(requestProps.TotalRows > (props.startRow + requestProps.RowCount)) {
+			props.startRow = props.startRow + requestProps.RowCount;
+			return jsomGetDataFromSearch(props, allResults);
+		} else {
+			return allResults;
+		}
+	});
 }
 export function jsomListItemRequest(props) {
-    //props is obj {url, listId, query, columnsToInclude}
-    return waitForScriptsReady('SP.js')
-    .then(function() {
-        //clearRequestDigest();
+	//props is obj {url, listId, query, columnsToInclude}
+	return waitForScriptsReady('SP.js')
+	.then(function() {
+		//clearRequestDigest();
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            list = clientContext.get_web().get_lists().getById( props.listId ),
-            camlQuery = new SP.CamlQuery(),
-            pagingSetup,
-            listItemCollection;
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+			list = clientContext.get_web().get_lists().getById( props.listId ),
+			camlQuery = new SP.CamlQuery(),
+			pagingSetup,
+			listItemCollection;
 
-        if (props.position) {
-            //position should be listItems.get_listItemCollectionPosition().get_pagingInfo()
-            //to go forwards listItems.get_listItemCollectionPosition().get_pagingInfo()
-            //to go backwards previousPagingInfo = "PagedPrev=TRUE&Paged=TRUE&p_ID=" + spItems.itemAt(0).get_item('ID'); 
-            pagingSetup = new SP.ListItemCollectionPosition();
-            pagingSetup.set_pagingInfo(props.position);
-            camlQuery.set_listItemCollectionPosition(pagingSetup);
-        }
-        if (props.folderRelativeUrl) {
-            //server relative url to scope the query, so it will only look in a certain folder
-            camlQuery.set_folderServerRelativeUrl(props.folderRelativeUrl);
-        }
+		if (props.position) {
+			//position should be listItems.get_listItemCollectionPosition().get_pagingInfo()
+			//to go forwards listItems.get_listItemCollectionPosition().get_pagingInfo()
+			//to go backwards previousPagingInfo = "PagedPrev=TRUE&Paged=TRUE&p_ID=" + spItems.itemAt(0).get_item('ID'); 
+			pagingSetup = new SP.ListItemCollectionPosition();
+			pagingSetup.set_pagingInfo(props.position);
+			camlQuery.set_listItemCollectionPosition(pagingSetup);
+		}
+		if (props.folderRelativeUrl) {
+			//server relative url to scope the query, so it will only look in a certain folder
+			camlQuery.set_folderServerRelativeUrl(props.folderRelativeUrl);
+		}
 
-        camlQuery.set_viewXml(props.query);
-        listItemCollection = list.getItems(camlQuery);
+		camlQuery.set_viewXml(props.query);
+		listItemCollection = list.getItems(camlQuery);
 
-        if (props.columnsToInclude) {
-            clientContext.load(listItemCollection, 'Include('+ props.columnsToInclude.join(',') +')');
-        }else { 
-            clientContext.load(listItemCollection);
-        }
+		if (props.columnsToInclude) {
+			clientContext.load(listItemCollection, 'Include('+ props.columnsToInclude.join(',') +')');
+		}else { 
+			clientContext.load(listItemCollection);
+		}
 
-        
+		
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            listItems: listItemCollection
-        });
-    });
+		return jsomSendDataToServer({
+			context: clientContext,
+			listItems: listItemCollection
+		});
+	});
 }
 export function jsomEnsureUser(user, url) {
-    //user can be an object or array
-    var datatype = Object.prototype.toString.call(user),
-        startStringCheck = /^i:0#\.f\|membership\|/,
-        verifiedUsers = [],
-        usersToVerify,
-        def = $.Deferred(),
-        context,
-        userLogin,
-        web,
-        temp;
+	//user can be an object or array
+	var datatype = Object.prototype.toString.call(user),
+		startStringCheck = /^i:0#\.f\|membership\|/,
+		verifiedUsers = [],
+		usersToVerify,
+		def = $.Deferred(),
+		context,
+		userLogin,
+		web,
+		temp;
 
-    if (datatype === '[object Object]') {
-        usersToVerify = [user];
-    }
-    if (datatype === '[object Array]') {
-        usersToVerify = user;
-    }
-    if (!usersToVerify) {
-        // never got set so the wrong datatype was passed
-        throw new Error('an object or array must be the parameter to jsomEnsureUser');
-    }
-    context = url ? new SP.ClientContext(url) : new SP.ClientContext.get_current();
-    web = context.get_web();
+	if (datatype === '[object Object]') {
+		usersToVerify = [user];
+	}
+	if (datatype === '[object Array]') {
+		usersToVerify = user;
+	}
+	if (!usersToVerify) {
+		// never got set so the wrong datatype was passed
+		throw new Error('an object or array must be the parameter to jsomEnsureUser');
+	}
+	context = url ? new SP.ClientContext(url) : new SP.ClientContext.get_current();
+	web = context.get_web();
 
 
-    usersToVerify.forEach(function(userData, index) {
-        //i:0#.f|membership|
-        userLogin = userData.AccountName || userData.WorkEmail;
+	usersToVerify.forEach(function(userData, index) {
+		//i:0#.f|membership|
+		userLogin = userData.AccountName || userData.WorkEmail;
 
-        if (!startStringCheck.test(userLogin)) {
-            userData.AccountName = 'i:0#.f|membership|'+userLogin.toLowerCase();
-            userLogin = userData.AccountName;
-        }
+		if (!startStringCheck.test(userLogin)) {
+			userData.AccountName = 'i:0#.f|membership|'+userLogin.toLowerCase();
+			userLogin = userData.AccountName;
+		}
 
-        temp = web.ensureUser(userLogin);
-        verifiedUsers[index] = temp;
-        context.load(verifiedUsers[index]);
-    });
+		temp = web.ensureUser(userLogin);
+		verifiedUsers[index] = temp;
+		context.load(verifiedUsers[index]);
+	});
 
-    jsomSendDataToServer({
-        context: context
-    }).then(function() {
-        var giveBackValue,
-            userTemp;
+	jsomSendDataToServer({
+		context: context
+	}).then(function() {
+		var giveBackValue,
+			userTemp;
 
-        usersToVerify.forEach(function(user, index) {
-            userTemp = verifiedUsers[index]; 
-            user.id = userTemp.get_id();
-            if (!user.WorkEmail) {
-                user.WorkEmail = userTemp.get_email();
-            }
-            if (!user.PreferredName) {
-                user.PreferredName = userTemp.get_title();
-            }
-        });
-        giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
-        def.resolve(giveBackValue);
-    }).fail(function() {
-        def.reject();
-    });
+		usersToVerify.forEach(function(user, index) {
+			userTemp = verifiedUsers[index]; 
+			user.id = userTemp.get_id();
+			if (!user.WorkEmail) {
+				user.WorkEmail = userTemp.get_email();
+			}
+			if (!user.PreferredName) {
+				user.PreferredName = userTemp.get_title();
+			}
+		});
+		giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
+		def.resolve(giveBackValue);
+	}).fail(function() {
+		def.reject();
+	});
 
-    return def.promise();
+	return def.promise();
 }
 export function jsomGetItemsById(props) {
-    //props is obj {url, listId || listName, arrayOfIDs, numberToStartAt columnsToInclude}
+	//props is obj {url, listId || listName, arrayOfIDs, numberToStartAt columnsToInclude}
 
-    return waitForScriptsReady('SP.js')
-    .then(function() {
-        //clearRequestDigest();
+	return waitForScriptsReady('SP.js')
+	.then(function() {
+		//clearRequestDigest();
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            arrayOfResults = props.previousResults || [],
-            totalItemsPerTrip = props.maxPerTrip || 200,
-            totalItemsToGet = props.arrayOfIDs.length,
-            ii = props.numberToStartAt || 0,
-            listItemCollection = [],
-            list = clientContext.get_web().get_lists();
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+			arrayOfResults = props.previousResults || [],
+			totalItemsPerTrip = props.maxPerTrip || 200,
+			totalItemsToGet = props.arrayOfIDs.length,
+			ii = props.numberToStartAt || 0,
+			listItemCollection = [],
+			list = clientContext.get_web().get_lists();
 
-        if (props.listId) {
-            list = list.getById( props.listId );
-        } else {
-            list = list.getByTitle( props.listName );
-        }
+		if (props.listId) {
+			list = list.getById( props.listId );
+		} else {
+			list = list.getByTitle( props.listName );
+		}
 
-        while (ii < totalItemsToGet) {
-            var item = list.getItemById( props.arrayOfIDs[ii] );
-            if (props.columnsToInclude) {
-                //Include('properties') does not work here;
-                clientContext.load (item, props.columnsToInclude);
-            }else { 
-                clientContext.load(item);
-            }
-            listItemCollection.push( item );
-            
-            if ( listItemCollection.length === totalItemsPerTrip ) {
-                ii++;
-                break;
-            } else {
-                ii++;
-                continue;
-            }
-        }   
+		while (ii < totalItemsToGet) {
+			var item = list.getItemById( props.arrayOfIDs[ii] );
+			if (props.columnsToInclude) {
+				//Include('properties') does not work here;
+				clientContext.load (item, props.columnsToInclude);
+			}else { 
+				clientContext.load(item);
+			}
+			listItemCollection.push( item );
+			
+			if ( listItemCollection.length === totalItemsPerTrip ) {
+				ii++;
+				break;
+			} else {
+				ii++;
+				continue;
+			}
+		}   
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            listItems: listItemCollection
-        }).then(function(data) {
-            var cleanedResults = jsomToObj(data.listItems),
-                combinedArray = arrayOfResults.concat( cleanedResults );
-                
-            if ( ii < totalItemsToGet ) {
-                props.numberToStartAt = ii;
-                props.previousResults = combinedArray;
-                return jsomGetItemsById(props);
-            }
+		return jsomSendDataToServer({
+			context: clientContext,
+			listItems: listItemCollection
+		}).then(function(data) {
+			var cleanedResults = jsomListItemDataExtractor(data.listItems),
+				combinedArray = arrayOfResults.concat( cleanedResults );
+				
+			if ( ii < totalItemsToGet ) {
+				props.numberToStartAt = ii;
+				props.previousResults = combinedArray;
+				return jsomGetItemsById(props);
+			}
 
-            return combinedArray;
-        });
-    });
+			return combinedArray;
+		});
+	});
 }
 export function jsomGetFilesByRelativeUrl(props) {
-    //props is obj {url, fileRefs, numberToStartAt columnsToInclude}
+	//props is obj {url, fileRefs, numberToStartAt columnsToInclude}
 
-    return waitForScriptsReady('SP.js')
-    .then(function() {
-        //clearRequestDigest();
+	return waitForScriptsReady('SP.js')
+	.then(function() {
+		//clearRequestDigest();
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            web = clientContext.get_web(),
-            totalItemsToGet = props.fileRefs.length,
-            ii = 0,
-            fileObjCollection = [];
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+			web = clientContext.get_web(),
+			totalItemsToGet = props.fileRefs.length,
+			ii = 0,
+			fileObjCollection = [];
 
-        while (ii < totalItemsToGet) {
-            var file = web.getFileByServerRelativeUrl(props.fileRefs[ii]);
-            if (props.columnsToInclude) {
-                //Include('properties') does not work here;
-                clientContext.load (file, props.columnsToInclude);
-            }else { 
-                clientContext.load(file);
-            }
-            fileObjCollection.push( file );
-            ii++;
-        }   
+		while (ii < totalItemsToGet) {
+			var file = web.getFileByServerRelativeUrl(props.fileRefs[ii]);
+			if (props.columnsToInclude) {
+				//Include('properties') does not work here;
+				clientContext.load (file, props.columnsToInclude);
+			}else { 
+				clientContext.load(file);
+			}
+			fileObjCollection.push( file );
+			ii++;
+		}   
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            files: fileObjCollection
-        }).then(function(data) {
-            return data;
-        });
-    });
+		return jsomSendDataToServer({
+			context: clientContext,
+			files: fileObjCollection
+		}).then(function(data) {
+			return data;
+		});
+	});
 }
 export function jsomTaxonomyRequest(termSetID) {
-    //item.IsAvailableForTagging
-    return loadSPScript('sp.taxonomy.js')
-    .then(function() {
-        //clearRequestDigest();
+	//item.IsAvailableForTagging
+	return loadSPScript('sp.taxonomy.js')
+	.then(function() {
+		//clearRequestDigest();
 
-        var clientContext = new SP.ClientContext.get_current(),
-            taxonomySession = SP.Taxonomy.TaxonomySession.getTaxonomySession(clientContext),
-            termStore = taxonomySession.get_termStores().getById("5b7c889a745c4087bccb796372e50d36"),
-            termSet = termStore.getTermSet(termSetID),
-            terms = termSet.getAllTerms();
-            
-            clientContext.load(terms, 'Include(CustomProperties, Id,'+
-                'IsAvailableForTagging, LocalCustomProperties, Name, PathOfTerm)');
+		var clientContext = new SP.ClientContext.get_current(),
+			taxonomySession = SP.Taxonomy.TaxonomySession.getTaxonomySession(clientContext),
+			termStore = taxonomySession.get_termStores().getById("5b7c889a745c4087bccb796372e50d36"),
+			termSet = termStore.getTermSet(termSetID),
+			terms = termSet.getAllTerms();
+			
+			clientContext.load(terms, 'Include(CustomProperties, Id,'+
+				'IsAvailableForTagging, LocalCustomProperties, Name, PathOfTerm)');
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            terms: terms
-        });
-    });
+		return jsomSendDataToServer({
+			context: clientContext,
+			terms: terms
+		});
+	});
 }
 export function jsomSendDataToServer(serverData) {
-    var def = $.Deferred();
-            
-    serverData.context.executeQueryAsync(
-        function() {
-            //success
-            def.resolve(serverData);
-        },
-        function() {
-            def.reject(arguments);
-        }
-    ); //end QueryAsync
-    return def.promise();
+	var def = $.Deferred();
+			
+	serverData.context.executeQueryAsync(
+		function() {
+			//success
+			def.resolve(serverData);
+		},
+		function() {
+			def.reject(arguments);
+		}
+	); //end QueryAsync
+	return def.promise();
 }
-export function jsomListItemDataExtractor(listItemCollection) {
-    
-    return jsomToObj(listItemCollection);
+export function jsomListItemDataExtractor(spItemCollection) {
+	
+	var cleanArray = [],
+		itemsToTranform;
+
+	if (spItemCollection.context) {
+		itemsToTranform = spItemCollection.listItems;
+	} else {
+		itemsToTranform = spItemCollection;
+	}
+
+	if (itemsToTranform.getEnumerator) {
+		var enumerableResponse = itemsToTranform.getEnumerator();
+
+		while (enumerableResponse.moveNext()) {
+			cleanArray.push(
+				enumerableResponse.get_current().get_fieldValues()
+			);
+		}
+
+		return cleanArray;
+	}
+
+	itemsToTranform.forEach(function(item) {
+		cleanArray.push(item.get_fieldValues());
+	});
+	return cleanArray;
+}
+/**
+ * @typedef updateObj
+ * @type {Object}
+ * @property {string} columnName the value that will be stored in the column.
+ * @property {any} columnValue type of data to be stored in column.
+ */
+export class jsomCUD{
+	constructor() {
+		this.sp = SP;
+		this.itemsToSend = [];
+	}
+	_getContext(site) {
+
+		if(site) {
+			this.context = new this.sp.ClientContext(this.siteUrl);
+		} else {
+			this.context = new this.sp.ClientContext.get_current();
+		}
+	}
+	_getList(listId) {
+		var isGuid = validGuid(this.listId);
+
+		if (isGuid) {
+			this.list = this.context.get_web().get_lists().getById(listId);
+		} else {
+			this.list = this.context.get_web().get_lists().getByTitle(listId);
+		}
+	}
+	_dataTranmitter() {
+		//recursive send loop here, return promise
+	}
+	_setupData() {
+
+	}
+	_determineDataType(value) {
+
+		let dataType = getDataType(value),
+			returnVal = null;
+
+		if (dataType !== 'object' || dataType !== 'array') {
+			returnVal = 'normal';
+		} else if (value.termGuid === null) {
+			//blanks out the field, {termGuid: null}
+			returnVal = 'taxBlank';
+		} else if (value.termGuid) {
+			//adds single value to field, {termLabel: , termGuid:}
+			returnVal = 'taxSingle'
+		} else if (value.multiTerms) {
+			//add multiple terms to field, [{label: '', guid: ''}, {label: '', guid: ''}]
+			returnVal = 'taxMulti';
+		} else if (value.choices) {
+			//adds multiple choices to field, [1,2,3]
+			returnVal = 'choiceMulti';
+		} else if (value.itemId) {
+			//adds single value to field, {itemId: number}
+			returnVal = 'lookupSingle';
+		} else if (value.idArray) {
+			//adds multiple items to field, [1,2,3]
+			returnVal = 'lookupMulti';
+		} else if (value.acct) {
+			//adds single employee to field, {acct: }  acct can be email or account name
+			returnVal = 'ppSingle';
+		} else if (value.acctArray) {
+			//adds multiple employees to field, {acctArray: [acct, acct,acct]}  acct can be email or account name
+			returnVal = 'ppMulti';
+		} else if (value.url) {
+			//pictue or hyperlink field, {url: , description: }
+			returnVal = 'hyperlink';
+		}
+		return returnVal;
+	}
+	_addDataType(colInfo) {
+		let fixedData = [];
+
+		colInfo.forEach((item) => {
+			let copy = Object.assign({}, item)
+			copy.dataType = getDataType(copy.columnValue);
+			fixedData.push(copy);
+		});
+
+		return fixedData;
+	}
+	/**
+	 * Add an item to be sent to a list.
+	 * @param {string} action create, update, recycle or delete 
+	 * @param {number} itemId id of the item to update, recycle or delete 
+	 * @param {updateObj[]} columnInfo array of objs to send to the server
+	 */
+	addItem(action, columnInfo, itemId) {
+
+		let prepedObj = {};
+
+		if (!action) {
+			throw new Error('action must be provided to add an object to addItem function');
+		}
+		prepedObj.action = itemObj.action.toLowerCase();
+
+		if (action !== 'create' && !itemId) {
+			throw new Error('a item id must be provided to update, delete or recycle an item');
+		}
+		prepedObj.itemId = itemId;
+
+		//after you call this method you will have an array of objs
+		//objs will be {columnName: , columnData: , dataType: }
+		prepedObj.columnData = _addDataType(columnInfo);
+
+		this.itemsToSend.push(prepedObj);
+	}
+	sendToSever(site, listId) {
+		//make sure everything is in place before doing process
+		var def = $.Deferred();
+
+		this
+		._getContext()
+		._getList()
+		._setupData()
+		._dataTranmitter()
+		.then((response) => {
+			def.resolve(response);
+		}).fail((data) => {
+			def.reject(data);
+		});
+
+		return def.promise();
+	}
+}
+
+export function jsomCUD(siteUrl, listInfo, data) {
+
+	//figure out if title or guid was passed
+
+	//if delete or recycle go here
+
+	//if create or update go here
+		//convert passed data array to server ready data
+			//convert datatype to server datatype
+			//prep value
+			//prepare for your method prepClientData
+			//prep server data
+			//send to server
+
 }
 api.jsomCUD = (function() {
 	// v 1.1
@@ -563,7 +697,7 @@ api.jsomCUD = (function() {
 					}
 				}
 			*/
-			var requestType = api.getDataType(serverRequest),
+			var requestType = api.getDataType( ),
 				toServer,
 				totalItemsForServer,
 				ii,
@@ -578,17 +712,7 @@ api.jsomCUD = (function() {
 				toServer.itemArray = [];
 				totalItemsForServer = serverRequest.length;
 
-				if (siteURL) {
-					toServer.context = new privateAPI.sPoint.ClientContext(siteURL);
-				} else {
-					toServer.context = new privateAPI.sPoint.ClientContext.get_current();
-				}
-
-				if (privateAPI.sPoint.Guid.isValid(listGUID)) {
-					list = toServer.context.get_web().get_lists().getById(listGUID);
-				} else {
-					list = toServer.context.get_web().get_lists().getByTitle(listGUID);
-				}
+				
 
 				// create update
 				for (ii = 0; ii < totalItemsForServer; ii++) {
