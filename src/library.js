@@ -3,10 +3,10 @@
 	need to import ajax and use with getUserData
  */
 import * as $ from 'jquery';
-import {loadSPScript,
+import {
+	loadSPScript,
 	validGuid,
-	waitForScriptsReady,
-	getDataType
+	waitForScriptsReady
 } from 'pd-sputil';
 
 const clearRequestDigest = function() {
@@ -53,7 +53,7 @@ export function jsomGetDataFromSearch(props, currentResults) {
 			props.startRow = 0;
 		}
 		if(!props.rowLimit) {
-			props.rowLimit = 250
+			props.rowLimit = 250;
 		}
 
 		keywordQuery.set_queryText(props.query);
@@ -347,16 +347,10 @@ export function jsomListItemDataExtractor(spItemCollection) {
 	});
 	return cleanArray;
 }
-/**
- * @typedef updateObj
- * @type {Object}
- * @property {string} columnName the value that will be stored in the column.
- * @property {any} columnValue type of data to be stored in column.
- */
 export class jsomCUD{
 	constructor() {
-		this.sp = SP;
 		this.itemsToSend = [];
+		this.userRequests = [];
 	}
 	_getContext(site) {
 
@@ -377,53 +371,155 @@ export class jsomCUD{
 	}
 	_dataTranmitter() {
 		//recursive send loop here, return promise
-	}
-	_setupData() {
 
+	}
+	_addColumnData(listItem, colData) {
+
+		colData.forEach((colObj) => {
+
+			if (colObj.dataType === 'taxBlank') {
+
+				let taxColObj = this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					taxField = this.context.castTo(taxColObj, this.sp.Taxonomy.TaxonomyField);
+				
+				taxField.validateSetValue(listItem, null);
+			}
+			else if (colObj.dataType === 'taxSingle') {
+				let taxColObj = this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					taxField = this.context.castTo(taxColObj, this.sp.Taxonomy.TaxonomyField);
+
+				let taxonomySingle = new this.sp.Taxonomy.TaxonomyFieldValue();
+					taxonomySingle.set_label(colObj.termLabel);
+					taxonomySingle.set_termGuid(colObj.termGuid);
+					taxonomySingle.set_wssId(-1);
+					taxField.setFieldValueByValue(listItem, taxonomySingle);
+			}
+			else if (colObj.dataType === 'taxMulti') {
+				let taxColObj = this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					taxField = this.context.castTo(taxColObj, this.sp.Taxonomy.TaxonomyField),
+					termPrep = colObj.multiTerms.map((termInfo) => {
+						//-1;#Mamo|10d05b55-6ae5-413b-9fe6-ff11b9b5767c
+						return `-1;# ${termInfo.termLabel}|${termInfo.termGuid}`;  
+					});
+
+				let terms =this.sp.Taxonomy.TaxonomyFieldValueCollection(termPrep.join(';#'),taxField);
+
+				taxField.setFieldValueByValueCollection(listItem, terms);
+			}
+			else if (colObj.dataType === 'choiceMulti') {
+				listItem.set_item(colObj.columnName, colObj.choices);
+			}
+			else if (colObj.dataType === 'lookupSingle') {
+				let lookupVal = new this.sp.FieldLookupValue();
+				lookupVal.set_lookupId(colObj.itemId);
+				listItem.set_item(colObj.columnName, lookupVal);
+			}
+			else if (colObj.dataType === 'lookupMulti') {
+				let multiLookupVal = colObj.idArray.map((ppId) => {
+					return this.sp.FieldUserValue.fromUser(ppId);
+				});
+				listItem.set_item(colObj.columnName, multiLookupVal);
+			}
+			else if (colObj.dataType === 'ppSingle') {
+				let ppVal = this.sp.FieldUserValue.fromUser(colObj.acct);
+				listItem.set_item(colObj.columnName, ppVal);
+			}
+			else if (colObj.dataType === 'ppMulti') {
+				let multiPPVal = colObj.acctArray.map((ppId) => {
+					let lookupValue = new this.sp.FieldLookupValue();
+					return lookupValue.set_lookupId(ppId);
+				});
+				listItem.set_item(colObj.columnName, multiPPVal);
+			}
+			else if (colObj.dataType === 'hyperlink') {
+				let hyperLink = new this.sp.FieldUrlValue();
+				hyperLink.set_url(colObj.url);
+				hyperLink.set_description(colObj.description);
+				listItem.set_item(colObj.columnName, hyperLink);
+			} else if (colObj.dataType === 'simple') {
+				listItem.set_item(colObj.columnName, colObj.columnValue);
+			}
+		}, this);
+
+	}
+	_loadItem(listItem) {
+		let nextIndex = this.itemsToSend.length;
+
+		listItem.update();
+		this.itemsToSend[nextIndex] = listItem;
+		this.context.load(this.itemsToSend[nextIndex]);
+	}
+	_createListItems() {
+
+		this.userRequests.forEach((obj) => {
+			let listItem = null;
+			if (obj.action === 'create') {
+				listItem = new this.sp.ListItemCreationInformation();
+				this._addColumnData()._loadItem();
+			} else if (obj.action === 'update') {
+				listItem = this.list.getItemById(obj.itemId);
+				this._addColumnData()._loadItem();
+			} else  if (obj.action === 'recycle') {
+				listItem = this.list.getItemById(obj.itemId);  
+				listItem.recycle();
+			} else if (obj.action === 'delete') {
+				listItem = this.list.getItemById(obj.itemId);  
+				listItem.deleteObject();
+			}
+		}, this);
 	}
 	_determineDataType(value) {
 
-		let dataType = getDataType(value),
-			returnVal = null;
-
-		if (dataType !== 'object' || dataType !== 'array') {
-			returnVal = 'normal';
-		} else if (value.termGuid === null) {
-			//blanks out the field, {termGuid: null}
-			returnVal = 'taxBlank';
+		if (value.termGuid === null) {
+			//blanks out the field
+			//value.termGuid: null
+			value.dataType = 'taxBlank';
 		} else if (value.termGuid) {
-			//adds single value to field, {termLabel: , termGuid:}
-			returnVal = 'taxSingle'
+			//adds single value to field
+			//value.termLabel: string
+			//value.termGuid: string guid
+			value.dataType = 'taxSingle';
 		} else if (value.multiTerms) {
-			//add multiple terms to field, [{label: '', guid: ''}, {label: '', guid: ''}]
-			returnVal = 'taxMulti';
+			//add multiple terms to field
+			//value.multiTerms: [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+			value.dataType = 'taxMulti';
 		} else if (value.choices) {
-			//adds multiple choices to field, [1,2,3]
-			returnVal = 'choiceMulti';
+			//adds multiple choices to field
+			//value.choices: ['one','two','three']
+			value.dataType = 'choiceMulti';
 		} else if (value.itemId) {
-			//adds single value to field, {itemId: number}
-			returnVal = 'lookupSingle';
+			//adds single value to field
+			//value.itemId: number
+			value.dataType = 'lookupSingle';
 		} else if (value.idArray) {
-			//adds multiple items to field, [1,2,3]
-			returnVal = 'lookupMulti';
+			//adds multiple items to field
+			//value.idArray: [1,2,3]
+			value.dataType = 'lookupMulti';
 		} else if (value.acct) {
-			//adds single employee to field, {acct: }  acct can be email or account name
-			returnVal = 'ppSingle';
+			//adds single employee to field
+			//value.acct: someone@onmicrosoft.com  acct can be email or account name
+			value.dataType = 'ppSingle';
 		} else if (value.acctArray) {
-			//adds multiple employees to field, {acctArray: [acct, acct,acct]}  acct can be email or account name
-			returnVal = 'ppMulti';
+			//adds multiple employees to field
+			//value.acctArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
+			value.dataType = 'ppMulti';
 		} else if (value.url) {
-			//pictue or hyperlink field, {url: , description: }
-			returnVal = 'hyperlink';
+			//pictue or hyperlink field
+			//value.url: string
+			//value.description: string 
+			value.dataType = 'hyperlink';
+		} else {
+			//all other types
+			//value.columnValue
+			value.dataType = 'simple';
 		}
-		return returnVal;
 	}
 	_addDataType(colInfo) {
 		let fixedData = [];
 
 		colInfo.forEach((item) => {
-			let copy = Object.assign({}, item)
-			copy.dataType = getDataType(copy.columnValue);
+			let copy = Object.assign({}, item);
+			this._determineDataType(copy);
 			fixedData.push(copy);
 		});
 
@@ -431,9 +527,24 @@ export class jsomCUD{
 	}
 	/**
 	 * Add an item to be sent to a list.
+	 * column info is an array of objects that contain the data to construct the list item
+	 * if the item is not create then itemId is required
+	 * if action is delete or recycle then no columnInfo is needed just the id
+	 * 
+	 * for create or update column data should be passed as follows
+	 * every columnInfo object must contain columnName
+	 * if single tax field add termLabel and termGuid to column object
+	 * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+	 * if multi choice field add choices to column object, ['one','two','three']
+	 * if single lookup field add itemId to column object, will contain id number
+	 * if multi lookup field add idArray to column object, [1,2,3]
+	 * if single person field add account to column object, account is email or account name
+	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+	 * if hyperlink field add url and description to column object
+	 * if none of these match your column type then pass the data to be stored as columnValue
 	 * @param {string} action create, update, recycle or delete 
 	 * @param {number} itemId id of the item to update, recycle or delete 
-	 * @param {updateObj[]} columnInfo array of objs to send to the server
+	 * @param {object[]} columnInfo array of objs to send to the server, there must be a object for each column
 	 */
 	addItem(action, columnInfo, itemId) {
 
@@ -442,7 +553,7 @@ export class jsomCUD{
 		if (!action) {
 			throw new Error('action must be provided to add an object to addItem function');
 		}
-		prepedObj.action = itemObj.action.toLowerCase();
+		prepedObj.action = action.toLowerCase();
 
 		if (action !== 'create' && !itemId) {
 			throw new Error('a item id must be provided to update, delete or recycle an item');
@@ -451,20 +562,31 @@ export class jsomCUD{
 
 		//after you call this method you will have an array of objs
 		//objs will be {columnName: , columnData: , dataType: }
-		prepedObj.columnData = _addDataType(columnInfo);
+		prepedObj.columnData = this._addDataType(columnInfo);
 
-		this.itemsToSend.push(prepedObj);
+		this.userRequests.push(prepedObj);
 	}
+	/**
+	 * Sends the data added with addItem method to the server
+	 * @param {string} site relative site url 
+	 * @param {string} listId guid or title of the list
+	 */
 	sendToSever(site, listId) {
 		//make sure everything is in place before doing process
-		var def = $.Deferred();
+		let def = $.Deferred(),
+			self = this;
 
-		this
-		._getContext()
-		._getList()
-		._setupData()
-		._dataTranmitter()
-		.then((response) => {
+		waitForScriptsReady('sp.js')
+		.then(() => {
+			self.sp = SP;
+
+			self
+			._getContext(site)
+			._getList(listId)
+			._createListItems();
+
+			return self._dataTranmitter();
+		}).then((response) => {
 			def.resolve(response);
 		}).fail((data) => {
 			def.reject(data);
@@ -473,317 +595,3 @@ export class jsomCUD{
 		return def.promise();
 	}
 }
-
-export function jsomCUD(siteUrl, listInfo, data) {
-
-	//figure out if title or guid was passed
-
-	//if delete or recycle go here
-
-	//if create or update go here
-		//convert passed data array to server ready data
-			//convert datatype to server datatype
-			//prep value
-			//prepare for your method prepClientData
-			//prep server data
-			//send to server
-
-}
-api.jsomCUD = (function() {
-	// v 1.1
-	// it based off jsom
-	//by Jed
-	//08/16/16
-	var privateAPI = {
-		sPoint: SP,
-		setItemValues: function(context, list, item, columnInfoObj) {
-			var toServerValue,
-				toServerType,
-				columnName,
-				columnValue,
-				taxColObj,
-				taxField;
-
-			for (columnName in columnInfoObj) {
-				if (columnInfoObj.hasOwnProperty(columnName)) {
-					//default 
-					toServerValue = columnInfoObj[columnName].value;
-					toServerType = api.getDataType(toServerValue);
-
-					if (toServerType === '[object Object]' && toServerValue !== undefined) {
-						//for comparison and constructing toServer
-						columnValue = columnInfoObj[columnName].value;
-
-						if (columnValue.termGuid || columnValue.termGuid === null) {
-							//single metadata, {termLabel: , termGuid:}
-							var taxonomySingle;
-
-							taxColObj = list.get_fields().getByInternalNameOrTitle(columnName);
-							taxField = context.castTo(taxColObj, privateAPI.sPoint.Taxonomy.TaxonomyField);
-							
-							if (columnValue.termGuid === null) {
-								//there is no value
-								taxonomySingle = null;
-								taxField.validateSetValue(item, taxonomySingle);
-							} else {
-								//there is a value
-								taxonomySingle = new privateAPI.sPoint.Taxonomy.TaxonomyFieldValue();
-								taxonomySingle.set_label(columnValue.termLabel);
-								taxonomySingle.set_termGuid(columnValue.termGuid);
-								taxonomySingle.set_wssId(-1);
-								taxField.setFieldValueByValue(item, taxonomySingle);
-							}
-							continue;
-						}
-						else if (columnValue.multiTerms) {
-							//multi metadata, {multiTerms: [{label: '', guid: ''}, {label: '', guid: ''}]}
-							taxColObj = list.get_fields().getByInternalNameOrTitle(columnName);
-							taxField = context.castTo(taxColObj, privateAPI.sPoint.Taxonomy.TaxonomyField);
-
-							var termPrep = columnValue.multiTerms.map(privateAPI.multiTerms);
-
-							var terms = new privateAPI.sPoint.Taxonomy.TaxonomyFieldValueCollection(termPrep.join(';#'),taxField);
-
-							taxField.setFieldValueByValueCollection(item, terms);
-							continue;
-						}
-						else if (columnValue.choices) {
-							//multi choice, {choices: [1,2,3]}
-							toServerValue = columnValue.choices;
-						}
-						else if (columnValue.itemId) {
-							//single lookup, {itemId: number}
-							toServerValue = new privateAPI.sPoint.FieldLookupValue();
-							toServerValue.set_lookupId(columnValue.itemId);
-						}
-						else if (columnValue.idArray) {
-							//multi lookup, {idArray: [1,2,3,4]}
-							toServerValue = columnValue.idArray.map(privateAPI.multiLookup);
-						}
-						else if (columnValue.acct) {
-							//person field single, {acct: }  acct can be email or account name
-							toServerValue = privateAPI.sPoint.FieldUserValue.fromUser(columnValue.acct);
-						}
-						else if (columnValue.acctArray) {
-							//multi person field, {acctArray: [acct, acct,acct]}  acct can be email or account name
-							toServerValue = columnValue.acctArray.map(privateAPI.multiPerson);
-						}
-						else if (columnValue.url) {
-							//picture of hyperlink, {url: , description: }
-							toServerValue = new privateAPI.sPoint.FieldUrlValue();
-							toServerValue.set_url(columnValue.url);
-							toServerValue.set_description(columnValue.description);
-						}
-					}
-					item.set_item(columnName, toServerValue);
-				}
-			}
-		},
-		multiLookup: function(item) {
-			var lookupValue = new privateAPI.sPoint.FieldLookupValue();
-			return lookupValue.set_lookupId(item);
-		},
-		multiTerms: function(termInfo) {
-			//-1;#Mamo|10d05b55-6ae5-413b-9fe6-ff11b9b5767c
-			return "-1;#" + termInfo.label + "|" +termInfo.guid;  
-		},
-		multiPerson: function(item) {
-
-			return privateAPI.sPoint.FieldUserValue.fromUser(item);
-		},
-		itemLoad: function(context, item, serverArray, currentIndex) {
-			item.update();
-			serverArray[currentIndex] = item;
-			context.load(serverArray[currentIndex]);
-		},
-		callByType: function(list, data, action) {
-			var dataType = api.getDataType(data),
-				currentId,
-				total,
-				ii;
-
-			if (dataType === '[object Array]') {
-				total = data.length;
-				for (ii = 0; ii < total; ii++) {
-					currentId = data[ii];
-					if (action === 'delete') {
-						privateAPI.deleteItems(list, currentId);
-					}
-					if (action === 'recycle') {
-						privateAPI.recycleItems(list, currentId);
-					}
-				}
-			}
-			if (dataType === '[object Number]' && action === 'delete') {
-				privateAPI.deleteItems(list, data);
-			}
-			if (dataType === '[object Number]' && action === 'recycle') {
-				privateAPI.recycleItems(list, data);
-			}
-		},
-		deleteItems: function(list, itemId) {
-			var listItem = list.getItemById(itemId);  
-			listItem.deleteObject();
-		},
-		recycleItems: function(list, itemId) {
-			var listItem = list.getItemById(itemId);  
-			listItem.recycle();
-		},
-	};
-	return {
-		columnType: {
-			slt: 'Single line of text',
-			mlt: 'Multiple lines of text',
-			num: 'Number',
-			currency: 'Currency',
-			date: 'Date and Time',
-			choice: 'Choice',
-			metadata: 'Managed Metadata',
-			person: 'Person or Group',
-			contentType: 'Content Type',
-			yesNo: 'Yes/No',
-			lookup: 'Lookup'
-		},
-		//this sets the value of the column
-		ValuePrep: function(type, value) {
-			//this function ensures values in fields are what the SP server expects
-			//validation happens before you get here
-			// Single line of text
-			// Multiple lines of text
-			// Number
-			// Currency
-			// Date and Time
-			// Choice
-			// Managed Metadata
-			// Person or Group
-			// Content Type
-			// Yes/No
-			// Lookup
-			var valueConst = api.jsomCUD.ValuePrep;
-			if (!(this instanceof valueConst)) {
-				return new valueConst(type, value);
-			}
-			this.type = type;
-			this.value = value;
-		},
-		PrepClientData: function(action, info, itemId) {
-			//action is create, delete or recycle, update
-			// info is object {
-			// 	columnName: instance of valueprep
-			// }
-			var clientConst = api.jsomCUD.PrepClientData;
-
-			if (!(this instanceof clientConst)) {
-				return new clientConst(action, info, itemId);
-			}
-
-			this.action = action;
-			if (info) {
-				this.columnInfo = info;
-			}
-			if (itemId) {
-				this.itemId = itemId;
-			}
-		},
-		prepServerData: function(listGUID, siteURL, serverRequest) {
-			/*
-				serverRequest should be an array of objects
-				{
-					action: 'update',
-					itemId: 3,
-					columnInfo: {
-						columnName: Valueprep instance,
-						columnName: object
-					}
-				}
-			*/
-			var requestType = api.getDataType( ),
-				toServer,
-				totalItemsForServer,
-				ii,
-				currentObj,
-				listItem,
-				itemInfo,
-				list,
-				action;
-			
-			if (requestType === '[object Array]') {
-				toServer = {};
-				toServer.itemArray = [];
-				totalItemsForServer = serverRequest.length;
-
-				
-
-				// create update
-				for (ii = 0; ii < totalItemsForServer; ii++) {
-					currentObj = serverRequest[ii];
-
-					action = currentObj.action;
-					if (!action) {
-						// if no action throw error
-						api.issue("Server Request with no action!");
-					}
-
-					action = action.toLowerCase();
-
-					if (action === 'delete' || action === 'recycle') {
-						// delete Items
-						// {
-						//     action: 'delete' or 'recycle',
-						//     itemId: [1,2,3,4] or 3
-						// }
-
-						if (!currentObj.itemId) {
-							api.issue("You can not delete/remove items without an ID!");
-						}
-						privateAPI.callByType(list, currentObj.itemId, action);
-						continue;
-					}
-					if (action === 'create') {
-						//exp serverRequest 
-						// [
-						//     {
-						//         action: 'create',
-						//         columnInfo: {
-						//             column1: 'a slt field',
-						//             column2: {termLabel: 'florida', termguid: '123-122-3244-234235-3423'}
-						//         }
-						//     }
-						// ]
-						listItem = list.addItem(new privateAPI.sPoint.ListItemCreationInformation());
-						itemInfo = currentObj.columnInfo;
-					}
-					if (action === 'update') {
-						//for updat exp serverRequest should be an array of objs [{itemid: number, columnInfo: {},{itemid: number, columnInfo: {}] 
-						// [
-						//     {
-						//         itemId: 2,
-						//         action: 'update'
-						//         columnInfo: {
-						//             column1: 'a slt field',
-						//             column2: {termLabel: 'florida', termguid: '123-122-3244-234235-3423'}
-						//     }
-						// ]
-
-						if (!currentObj.itemId) {
-							api.issue('You can not update a list item without an ID!');
-						}
-
-						listItem = list.getItemById(currentObj.itemId);
-						itemInfo = currentObj.columnInfo;
-					}
-					privateAPI.setItemValues(toServer.context, list, listItem, itemInfo);
-					privateAPI.itemLoad(toServer.context, listItem, toServer.itemArray, ii);
-				}
-			} else if (requestType === '[object Object]') {
-				//if an object is passed  recurse with serverRequest correted
-				return api.jsomCUD.prepServerData(listGUID, siteURL, [serverRequest]);
-			} else {
-				//error
-				api.issue("Incorrect serverRequest data type.");
-			}
-
-			return toServer;    
-		}
-	};
-})();
