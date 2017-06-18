@@ -6,7 +6,8 @@ import * as $ from 'jquery';
 import {
 	loadSPScript,
 	validGuid,
-	waitForScriptsReady
+	waitForScriptsReady,
+	getDataType
 } from 'pd-sputil';
 
 const clearRequestDigest = function() {
@@ -23,20 +24,46 @@ const clearRequestDigest = function() {
 		} 
 	}
 };
+const jsomListItemDataExtractor = function(spItemCollection) {
+	
+	var cleanArray = [],
+		itemsToTranform;
 
-export function jsomGetDataFromSearch(props, currentResults) {
-	// props {
-	//     url: ,
-	//     properties: []
-	//     query: "EmpPositionNumber=\""+ posNumber + "\"",
-	//     sourceId: ,
-	//     trimDuplicates: optional,
-	//     rowLimit: optional,
-	//     startRow: optional,
-	// }
+	if (spItemCollection.context) {
+		itemsToTranform = spItemCollection.listItems;
+	} else {
+		itemsToTranform = spItemCollection;
+	}
+
+	if (itemsToTranform.getEnumerator) {
+		var enumerableResponse = itemsToTranform.getEnumerator();
+
+		while (enumerableResponse.moveNext()) {
+			cleanArray.push(
+				enumerableResponse.get_current().get_fieldValues()
+			);
+		}
+
+		return cleanArray;
+	}
+
+	itemsToTranform.forEach(function(item) {
+		cleanArray.push(item.get_fieldValues());
+	});
+	return cleanArray;
+};
+
+/**
+ * Retrieves data from the SP search index
+ * url is a relative url
+ * trimDuplicates, rowLimit and startRow is optional
+ * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
+ * @returns {promise}
+ */
+export function jsomGetDataFromSearch(props) {
 
 	let scriptCheck = null;
-	let allResults = currentResults || [];
+	let currentResults = props.allResults || [];
 	let glob = Microsoft.SharePoint.Client;
 	if(glob && glob.Search) {
 		scriptCheck = $.Deferred().resolve();
@@ -78,27 +105,41 @@ export function jsomGetDataFromSearch(props, currentResults) {
 			requestProps = tableData.ResultTables[0],
 			results = requestProps.ResultRows;
 
-		allResults = allResults.concat(results.ResultRows);
+		props.allResults = currentResults.concat(results.ResultRows);
 
 		if(requestProps.TotalRows > (props.startRow + requestProps.RowCount)) {
 			props.startRow = props.startRow + requestProps.RowCount;
 			return jsomGetDataFromSearch(props, allResults);
 		} else {
-			return allResults;
+			return props.allResults;
 		}
 	});
 }
+/**
+ * Retrieves list items based on caml query
+ * url is a site relative url
+ * either pass listGUID or listTitle not both
+ * folderRelativeUrl is optional and is a relative url to scope results to a folder
+ * query is a caml query
+ * @param {{url:string, listGUID:string, listTitle:string, query:string, columnsToInclude:array, folderRelativeUrl:string}} props
+ * @returns {promise}
+ */
 export function jsomListItemRequest(props) {
-	//props is obj {url, listId, query, columnsToInclude}
+	//todo make this function recursive
 	return waitForScriptsReady('SP.js')
 	.then(function() {
-		//clearRequestDigest();
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-			list = clientContext.get_web().get_lists().getById( props.listId ),
 			camlQuery = new SP.CamlQuery(),
 			pagingSetup,
-			listItemCollection;
+			listItemCollection,
+			list;
+
+		if (props.listGUID) {
+			list = clientContext.get_web().get_lists().getById(props.listGUID);
+		} else {
+			list = clientContext.get_web().get_lists().getById(props.listTitle);
+		}
 
 		if (props.position) {
 			//position should be listItems.get_listItemCollectionPosition().get_pagingInfo()
@@ -130,9 +171,17 @@ export function jsomListItemRequest(props) {
 		});
 	});
 }
+/**
+ * Ensures user is in the site collections user information list
+ * user is an object or an array of objects that contains AccountName or WorkEmail
+ * url is a site relative url
+ * @param {object|array} user 
+ * @param {string} url
+ * @returns {promise}
+ */
 export function jsomEnsureUser(user, url) {
-	//user can be an object or array
-	var datatype = Object.prototype.toString.call(user),
+
+	var datatype = datatype(user),
 		startStringCheck = /^i:0#\.f\|membership\|/,
 		verifiedUsers = [],
 		usersToVerify,
@@ -142,10 +191,10 @@ export function jsomEnsureUser(user, url) {
 		web,
 		temp;
 
-	if (datatype === '[object Object]') {
+	if (datatype === 'object') {
 		usersToVerify = [user];
 	}
-	if (datatype === '[object Array]') {
+	if (datatype === 'array') {
 		usersToVerify = user;
 	}
 	if (!usersToVerify) {
@@ -194,25 +243,30 @@ export function jsomEnsureUser(user, url) {
 
 	return def.promise();
 }
+/**
+ * Gets list items based on id
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * @param {{url:string, listGUID:string, listTitle:string, arrayOfIds:number[], columnsToInclude:string[]}} props
+ * @returns {promise} 
+ */
 export function jsomGetItemsById(props) {
-	//props is obj {url, listId || listName, arrayOfIDs, numberToStartAt columnsToInclude}
 
 	return waitForScriptsReady('SP.js')
 	.then(function() {
-		//clearRequestDigest();
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-			arrayOfResults = props.previousResults || [],
-			totalItemsPerTrip = props.maxPerTrip || 200,
+			currentResults = props.allResults || [],
+			totalItemsPerTrip = props.maxPerTrip || 100,
 			totalItemsToGet = props.arrayOfIDs.length,
 			ii = props.numberToStartAt || 0,
 			listItemCollection = [],
-			list = clientContext.get_web().get_lists();
+			list;
 
-		if (props.listId) {
-			list = list.getById( props.listId );
+		if (props.listGUID) {
+			list = clientContext.get_web().get_lists().getById( props.listGUID );
 		} else {
-			list = list.getByTitle( props.listName );
+			list = clientContext.get_web().get_lists().getByTitle( props.listTitle );
 		}
 
 		while (ii < totalItemsToGet) {
@@ -238,25 +292,31 @@ export function jsomGetItemsById(props) {
 			context: clientContext,
 			listItems: listItemCollection
 		}).then(function(data) {
-			var cleanedResults = jsomListItemDataExtractor(data.listItems),
-				combinedArray = arrayOfResults.concat( cleanedResults );
+			var cleanedResults = jsomListItemDataExtractor(data.listItems);
+				
+			props.allResults = currentResults.concat( cleanedResults );
 				
 			if ( ii < totalItemsToGet ) {
 				props.numberToStartAt = ii;
-				props.previousResults = combinedArray;
 				return jsomGetItemsById(props);
 			}
 
-			return combinedArray;
+			return props.allResults;
 		});
 	});
 }
+/**
+ * Retrieves file data by relative url
+ * url is a site relative url
+ * fileRefs is an array of relative urls of the files
+ * columnToInclude is an array of column names that you want to retrieve, optional
+ * @param {{url:string, fileRefs:string[], columnsToInclude:string[]}} props
+ * @returns {promise}
+ */
 export function jsomGetFilesByRelativeUrl(props) {
-	//props is obj {url, fileRefs, numberToStartAt columnsToInclude}
 
 	return waitForScriptsReady('SP.js')
 	.then(function() {
-		//clearRequestDigest();
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 			web = clientContext.get_web(),
@@ -284,16 +344,22 @@ export function jsomGetFilesByRelativeUrl(props) {
 		});
 	});
 }
-export function jsomTaxonomyRequest(termSetID) {
+/**
+ * Retrieves term store terms based on termSetId
+ * @param {string} termStoreId 
+ * @param {string} termSetId
+ * @return {promise}
+ */
+export function jsomTaxonomyRequest(termStoreId, termSetId) {
 	//item.IsAvailableForTagging
 	return loadSPScript('sp.taxonomy.js')
 	.then(function() {
-		//clearRequestDigest();
+		// termStoreId ex - "5b7c889a745c4087bccb796372e50d36"
 
 		var clientContext = new SP.ClientContext.get_current(),
 			taxonomySession = SP.Taxonomy.TaxonomySession.getTaxonomySession(clientContext),
-			termStore = taxonomySession.get_termStores().getById("5b7c889a745c4087bccb796372e50d36"),
-			termSet = termStore.getTermSet(termSetID),
+			termStore = taxonomySession.get_termStores().getById(termStoreId),
+			termSet = termStore.getTermSet(termSetId),
 			terms = termSet.getAllTerms();
 			
 			clientContext.load(terms, 'Include(CustomProperties, Id,'+
@@ -305,6 +371,14 @@ export function jsomTaxonomyRequest(termSetID) {
 		});
 	});
 }
+/**
+ * Sends data to server
+ * must have a context key
+ * there can be a secondary key, ex listItems
+ * the object that is passed will be return on resolve
+ * @param {{context:object}} serverData 
+ * @returns {promise}
+ */
 export function jsomSendDataToServer(serverData) {
 	var def = $.Deferred();
 			
@@ -319,34 +393,9 @@ export function jsomSendDataToServer(serverData) {
 	); //end QueryAsync
 	return def.promise();
 }
-export function jsomListItemDataExtractor(spItemCollection) {
-	
-	var cleanArray = [],
-		itemsToTranform;
-
-	if (spItemCollection.context) {
-		itemsToTranform = spItemCollection.listItems;
-	} else {
-		itemsToTranform = spItemCollection;
-	}
-
-	if (itemsToTranform.getEnumerator) {
-		var enumerableResponse = itemsToTranform.getEnumerator();
-
-		while (enumerableResponse.moveNext()) {
-			cleanArray.push(
-				enumerableResponse.get_current().get_fieldValues()
-			);
-		}
-
-		return cleanArray;
-	}
-
-	itemsToTranform.forEach(function(item) {
-		cleanArray.push(item.get_fieldValues());
-	});
-	return cleanArray;
-}
+/**
+ * Class that allows for batch create, update, recycle, delete
+ */
 export class jsomCUD{
 	constructor() {
 		this.itemsToSend = [];
@@ -370,8 +419,11 @@ export class jsomCUD{
 		}
 	}
 	_dataTranmitter() {
-		//recursive send loop here, return promise
-
+		
+		return jsomSendDataToServer({
+			context: this.context,
+			listItems: this.itemsToSend
+		});
 	}
 	_addColumnData(listItem, colData) {
 
