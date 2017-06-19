@@ -73,7 +73,7 @@ export function jsomGetDataFromSearch(props) {
 
 	return scriptCheck.then(function() {
 
-		let clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+		let clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext('/search'),
 			keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
 
 		if(!props.startRow) {
@@ -175,11 +175,11 @@ export function jsomListItemRequest(props) {
  * Ensures user is in the site collections user information list
  * user is an object or an array of objects that contains AccountName or WorkEmail
  * url is a site relative url
- * @param {object|array} user 
  * @param {string} url
+ * @param {object|array} user 
  * @returns {promise}
  */
-export function jsomEnsureUser(user, url) {
+export function jsomEnsureUser(url, user) {
 
 	var datatype = datatype(user),
 		startStringCheck = /^i:0#\.f\|membership\|/,
