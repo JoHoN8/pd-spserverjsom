@@ -1,6 +1,5 @@
 /**
 	app name pd-spserverjsom
-	need to import ajax and use with getUserData
  */
 import * as $ from 'jquery';
 import {
