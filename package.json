@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "src/library.js",
   "scripts": {
-    "devServer": "webpack-dev-server",
-    "dev": "webpack",
-    "prod": "webpack -p"
+    "dev": "webpack --env dev",
+    "testFile": "webpack --env test",
+    "prod": "webpack --env build"
   },
   "license": "ISC",
   "dependencies": {
