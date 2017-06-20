@@ -352,8 +352,18 @@ export function jsomGetFilesByRelativeUrl(props) {
  */
 export function jsomTaxonomyRequest(termStoreId, termSetId) {
 	//item.IsAvailableForTagging
-	return loadSPScript('sp.taxonomy.js')
-	.then(function() {
+	return waitForScriptsReady('sp.js')
+	.then(() => {
+		let tax;
+
+		if(sp.taxonomy) {
+			//already loaded
+			tax = $.Deferred().resolve();
+		} else {
+			tax = loadSPScript('sp.taxonomy.js');
+		}
+		return tax;
+	}).then(function() {
 		// termStoreId ex - "5b7c889a745c4087bccb796372e50d36"
 
 		var clientContext = new SP.ClientContext.get_current(),

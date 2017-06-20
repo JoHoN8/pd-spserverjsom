@@ -1,13 +1,13 @@
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
-		module.exports = factory(require("jquery"));
+		module.exports = factory(require("jquery"), require("pd-sputil"));
 	else if(typeof define === 'function' && define.amd)
-		define(["jquery"], factory);
+		define(["jquery", "pd-sputil"], factory);
 	else if(typeof exports === 'object')
-		exports["pdspserverjsom"] = factory(require("jquery"));
+		exports["pdspserverjsom"] = factory(require("jquery"), require("pd-sputil"));
 	else
-		root["pdspserverjsom"] = factory(root["$"]);
-})(this, function(__WEBPACK_EXTERNAL_MODULE_0__) {
+		root["pdspserverjsom"] = factory(root["$"], root["pdsputil"]);
+})(this, function(__WEBPACK_EXTERNAL_MODULE_0__, __WEBPACK_EXTERNAL_MODULE_1__) {
 return /******/ (function(modules) { // webpackBootstrap
 /******/ 	// The module cache
 /******/ 	var installedModules = {};
@@ -84,596 +84,692 @@ module.exports = __WEBPACK_EXTERNAL_MODULE_0__;
 
 /***/ }),
 /* 1 */
+/***/ (function(module, exports) {
+
+module.exports = __WEBPACK_EXTERNAL_MODULE_1__;
+
+/***/ }),
+/* 2 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony export (immutable) */ __webpack_exports__["spSaveForm"] = spSaveForm;
-/* harmony export (immutable) */ __webpack_exports__["getDataType"] = getDataType;
-/* harmony export (immutable) */ __webpack_exports__["elementTagName"] = elementTagName;
-/* harmony export (immutable) */ __webpack_exports__["argsConverter"] = argsConverter;
-/* harmony export (immutable) */ __webpack_exports__["arrayInsertAtIndex"] = arrayInsertAtIndex;
-/* harmony export (immutable) */ __webpack_exports__["arrayRemoveAtIndex"] = arrayRemoveAtIndex;
-/* harmony export (immutable) */ __webpack_exports__["encodeAccountName"] = encodeAccountName;
-/* harmony export (immutable) */ __webpack_exports__["promiseDelay"] = promiseDelay;
-/* harmony export (immutable) */ __webpack_exports__["exportToCSV"] = exportToCSV;
-/* harmony export (immutable) */ __webpack_exports__["getPageInfo"] = getPageInfo;
+/* harmony export (immutable) */ __webpack_exports__["jsomGetDataFromSearch"] = jsomGetDataFromSearch;
+/* harmony export (immutable) */ __webpack_exports__["jsomListItemRequest"] = jsomListItemRequest;
+/* harmony export (immutable) */ __webpack_exports__["jsomEnsureUser"] = jsomEnsureUser;
+/* harmony export (immutable) */ __webpack_exports__["jsomGetItemsById"] = jsomGetItemsById;
+/* harmony export (immutable) */ __webpack_exports__["jsomGetFilesByRelativeUrl"] = jsomGetFilesByRelativeUrl;
+/* harmony export (immutable) */ __webpack_exports__["jsomTaxonomyRequest"] = jsomTaxonomyRequest;
+/* harmony export (immutable) */ __webpack_exports__["jsomSendDataToServer"] = jsomSendDataToServer;
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomCUD", function() { return jsomCUD; });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_jquery__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_pd_sputil__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_pd_sputil___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__);
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
 /**
-    app name sputil
+	app name pd-spserverjsom
+	need to import ajax and use with getUserData
  */
 
 
-const processRow = function (row) {
-    var finalVal = '';
-    for (var j = 0; j < row.length; j++) {
-        var innerValue = row[j] === null ? '' : row[j].toString();
-        if (row[j] instanceof Date) {
-            innerValue = row[j].toLocaleString();
-        }
-        var result = innerValue.replace(/"/g, '""');
-        if (result.search(/("|,|\n)/g) >= 0) {
-            result = '"' + result + '"';
-        }
-        if (j > 0) {
-            finalVal += ',';
-        }
-        finalVal += result;
-    }
-    return finalVal + '\r\n';
+
+var clearRequestDigest = function clearRequestDigest() {
+	//this function was to clear the web manager when a taxonomy field was on the dom and you couldnt use jsom across site collections
+	//the issue seems to be fixed 7/26/16 and i am commenting out the places where it is call in this file
+	var manager = Sys.Net.WebRequestManager;
+	if (manager._events !== null && manager._events._list !== null) {
+		var invokingRequests = manager._events._list.invokingRequest;
+
+		while (invokingRequests !== null && invokingRequests.length > 0) {
+			manager.remove_invokingRequest(invokingRequests[0]);
+		}
+	}
 };
-const profileProps = ['PreferredName','SPS-JobTitle','WorkPhone','OfficeNumber',
-    'WorkEmail','doeaSpecialAccount','SPS-Department','AccountName','SPS-Location',
-    'PositionID','Manager','Office', "LastName", "FirstName"];
-/* harmony export (immutable) */ __webpack_exports__["profileProps"] = profileProps;
+var jsomListItemDataExtractor = function jsomListItemDataExtractor(spItemCollection) {
 
+	var cleanArray = [],
+	    itemsToTranform;
 
-function spSaveForm(formId, saveButtonValue) {
-    if (!PreSaveItem()) {return false;}
-    if (formId && SPClientForms.ClientFormManager.SubmitClientForm(formId)) {return false;}
-    WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(saveButtonValue, "", true, "", "", false, true));
-}
-function getDataType(item) {
-
-	return Object.prototype.toString.call(item);
-}
-function elementTagName(element) {
-	var ele;
-	if (element instanceof __WEBPACK_IMPORTED_MODULE_0_jquery__) {
-		ele = element.prop('tagName');
-	}else {
-		ele = element.tagName;
-	}
-
-	return ele.toLowerCase();
-}
-function argsConverter(args, startAt) {
-	var giveBack = [],
-		numberToStartAt,
-		total = args.length;
-	for (numberToStartAt = startAt || 0; numberToStartAt < total; numberToStartAt++){
-		giveBack.push(args[numberToStartAt]);
-	  }
-	  return giveBack;
-}
-function arrayInsertAtIndex(array, index) {
-	//all items past index will be inserted starting at index number
-	var arrayToInsert = Array.prototype.splice.apply(arguments, [2]);
-	Array.prototype.splice.apply(array, [index, 0].concat(arrayToInsert));
-	return array;
-}
-function arrayRemoveAtIndex(array, index) {
-	Array.prototype.splice.apply(array, [index, 1]);
-	return array;
-}
-function encodeAccountName(acctName) {
-	var check = /^i:0\#\.f\|membership\|/,
-		formattedName;
-
-	if (check.test(acctName)) {
-		formattedName = acctName;
+	if (spItemCollection.context) {
+		itemsToTranform = spItemCollection.listItems;
 	} else {
-		formattedName = 'i:0#.f|membership|' + acctName;
+		itemsToTranform = spItemCollection;
 	}
 
-	return encodeURIComponent(formattedName);
-}
-function promiseDelay(time) {
-	var def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"](),
-		amount = time || 5000;
+	if (itemsToTranform.getEnumerator) {
+		var enumerableResponse = itemsToTranform.getEnumerator();
 
-	setTimeout(function() {
-		def.resolve();
-	}, amount);
-	return def.promise();
-}
-class sesStorage {
-	//frontEnd to session Storage
-    constructor() {
-        this.storageAdaptor = sessionStorage;
-    }
-	toType(obj) {
-		return ({}).toString.call(obj).match(/\s([a-z|A-Z]+)/)[1].toLowerCase();
-	}
-	getItem(key) {
-		var item = this.storageAdaptor.getItem(key);
-
-		try {
-			item = JSON.parse(item);
-		} catch (e) {}
-
-		return item;
-	}
-	setItem(key, value) {
-		var type = this.toType(value);
-
-		if (/object|array/.test(type)) {
-			value = JSON.stringify(value);
+		while (enumerableResponse.moveNext()) {
+			cleanArray.push(enumerableResponse.get_current().get_fieldValues());
 		}
 
-		this.storageAdaptor.setItem(key, value);
+		return cleanArray;
 	}
-	removeItem(key) {
-		this.storageAdaptor.removeItem(key);
-	}
-}
-/* harmony export (immutable) */ __webpack_exports__["sesStorage"] = sesStorage;
 
-class sublish {
-    constructor() {
-        this.cache = {};
-    }
-    publish(id) {
-        var args = argsConverter(arguments, 1),
-            ii,
-            total;
-        if (!this.cache[id]) {
-            this.cache[id] = [];
-        }
-        total = this.cache[id].length;
-        for (ii=0; ii < total; ii++) {
-            this.cache[id][ii].apply(this, args);
-        }
-
-    }
-    subscribe(id, fn) {
-        if (!this.cache[id]) {
-            this.cache[id] = [fn];
-        } else {
-            this.cache[id].push(fn);
-        }
-    }
-    unsubscribe(id, fn) {
-        var ii,
-            total;
-        if (!this.cache[id]) {
-            return;
-        }
-        total = this.cache[id].length;
-        for(ii = 0; ii < total; ii++){
-            if (this.cache[id][ii] === fn) {
-                this.cache[id].splice(ii, 1);
-            }
-        }
-    }
-    clear(id) {
-        if (!this.cache[id]) {
-            return;
-        }
-        this.cache[id] = [];
-    }
-}
-/* harmony export (immutable) */ __webpack_exports__["sublish"] = sublish;
-
-function exportToCSV(filename, rows) {
-    /*
-        rows should be
-        exportToCsv('export.csv', [
-            ['name','description'],	
-            ['david','123'],
-            ['jona','""'],
-            ['a','b'],
-
-        ])
-    
-    */
-    var csvFile = '';
-    for (var i = 0; i < rows.length; i++) {
-        csvFile += processRow(rows[i]);
-    }
-
-    var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
-    if (navigator.msSaveBlob) { // IE 10+
-        navigator.msSaveBlob(blob, filename);
-    } else {
-        var link = document.createElement("a");
-        if (link.download !== undefined) { // feature detection
-            // Browsers that support HTML5 download attribute
-            var url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", filename);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    }
-}
-function getPageInfo() {
-    
-    return _spPageContextInfo;
+	itemsToTranform.forEach(function (item) {
+		cleanArray.push(item.get_fieldValues());
+	});
+	return cleanArray;
 };
-
-/***/ }),
-/* 2 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-    value: true
-});
-exports.jsomGetDataFromSearch = jsomGetDataFromSearch;
-exports.jsomListItemRequest = jsomListItemRequest;
-exports.jsomEnsureUser = jsomEnsureUser;
-exports.jsomGetItemsById = jsomGetItemsById;
-exports.jsomGetFilesByRelativeUrl = jsomGetFilesByRelativeUrl;
-exports.jsomTaxonomyRequest = jsomTaxonomyRequest;
-exports.jsomSendDataToServer = jsomSendDataToServer;
-exports.jsomListItemDataExtractor = jsomListItemDataExtractor;
-
-var _jquery = __webpack_require__(0);
-
-var $ = _interopRequireWildcard(_jquery);
-
-var _pdSputil = __webpack_require__(1);
-
-function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
 
 /**
-    app name pd-spserverjsom
-    need to import ajax and use with getUserData
+ * Retrieves data from the SP search index
+ * url is a relative url
+ * trimDuplicates, rowLimit and startRow is optional
+ * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
+ * @returns {promise}
  */
-var waitForScriptsReady = function waitForScriptsReady(scriptName) {
-    var def = $.Deferred();
+function jsomGetDataFromSearch(props) {
 
-    ExecuteOrDelayUntilScriptLoaded(function () {
-        return def.resolve('Ready');
-    }, scriptName);
+	var scriptCheck = null;
+	var currentResults = props.allResults || [];
+	var glob = Microsoft.SharePoint.Client;
+	if (glob && glob.Search) {
+		scriptCheck = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]().resolve();
+	} else {
+		scriptCheck = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["loadSPScript"])("SP.Search.js");
+	}
 
-    return def.promise();
-};
-var clearRequestDigest = function clearRequestDigest() {
-    //this function was to clear the web manager when a taxonomy field was on the dom and you couldnt use jsom across site collections
-    //the issue seems to be fixed 7/26/16 and i am commenting out the places where it is call in this file
-    var manager = Sys.Net.WebRequestManager;
-    if (manager._events !== null && manager._events._list !== null) {
-        var invokingRequests = manager._events._list.invokingRequest;
+	return scriptCheck.then(function () {
 
-        while (invokingRequests !== null && invokingRequests.length > 0) {
-            manager.remove_invokingRequest(invokingRequests[0]);
-        }
-    }
-};
-var jsomToObj = function jsomToObj(spItemCollection) {
-    var cleanArray = [],
-        itemsToTranform;
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext('/search'),
+		    keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
 
-    if (spItemCollection.context) {
-        itemsToTranform = spItemCollection.listItems;
-    } else {
-        itemsToTranform = spItemCollection;
-    }
+		if (!props.startRow) {
+			props.startRow = 0;
+		}
+		if (!props.rowLimit) {
+			props.rowLimit = 250;
+		}
 
-    if (itemsToTranform.getEnumerator) {
-        var enumerableResponse = itemsToTranform.getEnumerator();
+		keywordQuery.set_queryText(props.query);
+		keywordQuery.set_sourceId(props.sourceId);
+		keywordQuery.set_trimDuplicates(props.trimDuplicates || false);
+		keywordQuery.set_startRow(props.startRow);
+		keywordQuery.set_rowLimit(props.rowLimit);
 
-        while (enumerableResponse.moveNext()) {
-            cleanArray.push(enumerableResponse.get_current().get_fieldValues());
-        }
+		if (props.properties) {
+			var propertiesObj = keywordQuery.get_selectProperties();
+			props.properties.forEach(function (item) {
+				propertiesObj.add(item);
+			});
+		}
+		var searchExecute = new Microsoft.SharePoint.Client.Search.Query.SearchExecutor(clientContext);
+		var results = searchExecute.executeQuery(keywordQuery);
 
-        return cleanArray;
-    }
+		return jsomSendDataToServer({
+			context: clientContext,
+			results: results
+		});
+	}).then(function (response) {
+		var tableData = response.results.get_value(),
+		    requestProps = tableData.ResultTables[0],
+		    results = requestProps.ResultRows;
 
-    itemsToTranform.forEach(function (item) {
-        cleanArray.push(item.get_fieldValues());
-    });
-    return cleanArray;
-};
+		props.allResults = currentResults.concat(results.ResultRows);
 
-function jsomGetDataFromSearch(props, currentResults) {
-    // props {
-    //     url: ,
-    //     properties: []
-    //     query: "EmpPositionNumber=\""+ posNumber + "\"",
-    //     sourceId: ,
-    //     trimDuplicates: optional,
-    //     rowLimit: optional,
-    //     startRow: optional,
-    // }
-
-    var scriptCheck = null;
-    var allResults = currentResults || [];
-    var glob = Microsoft.SharePoint.Client;
-    if (glob && glob.Search) {
-        scriptCheck = $.Deferred().resolve();
-    } else {
-        scriptCheck = (0, _pdSputil.loadSPScript)("SP.Search.js");
-    }
-
-    return scriptCheck.then(function () {
-
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
-
-        if (!props.startRow) {
-            props.startRow = 0;
-        }
-        if (!props.rowLimit) {
-            props.rowLimit = 250;
-        }
-
-        keywordQuery.set_queryText(props.query);
-        keywordQuery.set_sourceId(props.sourceId);
-        keywordQuery.set_trimDuplicates(props.trimDuplicates || false);
-        keywordQuery.set_startRow(props.startRow);
-        keywordQuery.set_rowLimit(props.rowLimit);
-
-        if (props.properties) {
-            var propertiesObj = keywordQuery.get_selectProperties();
-            props.properties.forEach(function (item) {
-                propertiesObj.add(item);
-            });
-        }
-        var searchExecute = new Microsoft.SharePoint.Client.Search.Query.SearchExecutor(clientContext);
-        var results = searchExecute.executeQuery(keywordQuery);
-
-        return jsomSendDataToServer({
-            context: clientContext,
-            results: results
-        });
-    }).then(function (response) {
-        var tableData = response.results.get_value(),
-            requestProps = tableData.ResultTables[0],
-            results = requestProps.ResultRows;
-
-        allResults = allResults.concat(results.ResultRows);
-
-        if (requestProps.TotalRows > props.startRow + requestProps.RowCount) {
-            props.startRow = props.startRow + requestProps.RowCount;
-            return jsomGetDataFromSearch(props, allResults);
-        } else {
-            return allResults;
-        }
-    });
+		if (requestProps.TotalRows > props.startRow + requestProps.RowCount) {
+			props.startRow = props.startRow + requestProps.RowCount;
+			return jsomGetDataFromSearch(props, allResults);
+		} else {
+			return props.allResults;
+		}
+	});
 }
+/**
+ * Retrieves list items based on caml query
+ * url is a site relative url
+ * either pass listGUID or listTitle not both
+ * folderRelativeUrl is optional and is a relative url to scope results to a folder
+ * query is a caml query
+ * @param {{url:string, listGUID:string, listTitle:string, query:string, columnsToInclude:array, folderRelativeUrl:string}} props
+ * @returns {promise}
+ */
 function jsomListItemRequest(props) {
-    //props is obj {url, listId, query, columnsToInclude}
-    return waitForScriptsReady('SP.js').then(function () {
-        //clearRequestDigest();
+	//todo make this function recursive
+	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            list = clientContext.get_web().get_lists().getById(props.listId),
-            camlQuery = new SP.CamlQuery(),
-            pagingSetup,
-            listItemCollection;
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+		    camlQuery = new SP.CamlQuery(),
+		    pagingSetup,
+		    listItemCollection,
+		    list;
 
-        if (props.position) {
-            //position should be listItems.get_listItemCollectionPosition().get_pagingInfo()
-            //to go forwards listItems.get_listItemCollectionPosition().get_pagingInfo()
-            //to go backwards previousPagingInfo = "PagedPrev=TRUE&Paged=TRUE&p_ID=" + spItems.itemAt(0).get_item('ID'); 
-            pagingSetup = new SP.ListItemCollectionPosition();
-            pagingSetup.set_pagingInfo(props.position);
-            camlQuery.set_listItemCollectionPosition(pagingSetup);
-        }
-        if (props.folderRelativeUrl) {
-            //server relative url to scope the query, so it will only look in a certain folder
-            camlQuery.set_folderServerRelativeUrl(props.folderRelativeUrl);
-        }
+		if (props.listGUID) {
+			list = clientContext.get_web().get_lists().getById(props.listGUID);
+		} else {
+			list = clientContext.get_web().get_lists().getById(props.listTitle);
+		}
 
-        camlQuery.set_viewXml(props.query);
-        listItemCollection = list.getItems(camlQuery);
+		if (props.position) {
+			//position should be listItems.get_listItemCollectionPosition().get_pagingInfo()
+			//to go forwards listItems.get_listItemCollectionPosition().get_pagingInfo()
+			//to go backwards previousPagingInfo = "PagedPrev=TRUE&Paged=TRUE&p_ID=" + spItems.itemAt(0).get_item('ID'); 
+			pagingSetup = new SP.ListItemCollectionPosition();
+			pagingSetup.set_pagingInfo(props.position);
+			camlQuery.set_listItemCollectionPosition(pagingSetup);
+		}
+		if (props.folderRelativeUrl) {
+			//server relative url to scope the query, so it will only look in a certain folder
+			camlQuery.set_folderServerRelativeUrl(props.folderRelativeUrl);
+		}
 
-        if (props.columnsToInclude) {
-            clientContext.load(listItemCollection, 'Include(' + props.columnsToInclude.join(',') + ')');
-        } else {
-            clientContext.load(listItemCollection);
-        }
+		camlQuery.set_viewXml(props.query);
+		listItemCollection = list.getItems(camlQuery);
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            listItems: listItemCollection
-        });
-    });
+		if (props.columnsToInclude) {
+			clientContext.load(listItemCollection, 'Include(' + props.columnsToInclude.join(',') + ')');
+		} else {
+			clientContext.load(listItemCollection);
+		}
+
+		return jsomSendDataToServer({
+			context: clientContext,
+			listItems: listItemCollection
+		});
+	});
 }
-function jsomEnsureUser(user, url) {
-    //user can be an object or array
-    var datatype = Object.prototype.toString.call(user),
-        startStringCheck = /^i:0#\.f\|membership\|/,
-        verifiedUsers = [],
-        usersToVerify,
-        def = $.Deferred(),
-        context,
-        userLogin,
-        web,
-        temp;
+/**
+ * Ensures user is in the site collections user information list
+ * user is an object or an array of objects that contains AccountName or WorkEmail
+ * url is a site relative url
+ * @param {string} url
+ * @param {object|array} user 
+ * @returns {promise}
+ */
+function jsomEnsureUser(url, user) {
 
-    if (datatype === '[object Object]') {
-        usersToVerify = [user];
-    }
-    if (datatype === '[object Array]') {
-        usersToVerify = user;
-    }
-    if (!usersToVerify) {
-        // never got set so the wrong datatype was passed
-        throw new Error('an object or array must be the parameter to jsomEnsureUser');
-    }
-    context = url ? new SP.ClientContext(url) : new SP.ClientContext.get_current();
-    web = context.get_web();
+	var datatype = datatype(user),
+	    startStringCheck = /^i:0#\.f\|membership\|/,
+	    verifiedUsers = [],
+	    usersToVerify,
+	    def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"](),
+	    context,
+	    userLogin,
+	    web,
+	    temp;
 
-    usersToVerify.forEach(function (userData, index) {
-        //i:0#.f|membership|
-        userLogin = userData.AccountName || userData.WorkEmail;
+	if (datatype === 'object') {
+		usersToVerify = [user];
+	}
+	if (datatype === 'array') {
+		usersToVerify = user;
+	}
+	if (!usersToVerify) {
+		// never got set so the wrong datatype was passed
+		throw new Error('an object or array must be the parameter to jsomEnsureUser');
+	}
+	context = url ? new SP.ClientContext(url) : new SP.ClientContext.get_current();
+	web = context.get_web();
 
-        if (!startStringCheck.test(userLogin)) {
-            userData.AccountName = 'i:0#.f|membership|' + userLogin.toLowerCase();
-            userLogin = userData.AccountName;
-        }
+	usersToVerify.forEach(function (userData, index) {
+		//i:0#.f|membership|
+		userLogin = userData.AccountName || userData.WorkEmail;
 
-        temp = web.ensureUser(userLogin);
-        verifiedUsers[index] = temp;
-        context.load(verifiedUsers[index]);
-    });
+		if (!startStringCheck.test(userLogin)) {
+			userData.AccountName = 'i:0#.f|membership|' + userLogin.toLowerCase();
+			userLogin = userData.AccountName;
+		}
 
-    jsomSendDataToServer({
-        context: context
-    }).then(function () {
-        var giveBackValue, userTemp;
+		temp = web.ensureUser(userLogin);
+		verifiedUsers[index] = temp;
+		context.load(verifiedUsers[index]);
+	});
 
-        usersToVerify.forEach(function (user, index) {
-            userTemp = verifiedUsers[index];
-            user.id = userTemp.get_id();
-            if (!user.WorkEmail) {
-                user.WorkEmail = userTemp.get_email();
-            }
-            if (!user.PreferredName) {
-                user.PreferredName = userTemp.get_title();
-            }
-        });
-        giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
-        def.resolve(giveBackValue);
-    }).fail(function () {
-        def.reject();
-    });
+	jsomSendDataToServer({
+		context: context
+	}).then(function () {
+		var giveBackValue, userTemp;
 
-    return def.promise();
+		usersToVerify.forEach(function (user, index) {
+			userTemp = verifiedUsers[index];
+			user.id = userTemp.get_id();
+			if (!user.WorkEmail) {
+				user.WorkEmail = userTemp.get_email();
+			}
+			if (!user.PreferredName) {
+				user.PreferredName = userTemp.get_title();
+			}
+		});
+		giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
+		def.resolve(giveBackValue);
+	}).fail(function () {
+		def.reject();
+	});
+
+	return def.promise();
 }
+/**
+ * Gets list items based on id
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * @param {{url:string, listGUID:string, listTitle:string, arrayOfIds:number[], columnsToInclude:string[]}} props
+ * @returns {promise} 
+ */
 function jsomGetItemsById(props) {
-    //props is obj {url, listId || listName, arrayOfIDs, numberToStartAt columnsToInclude}
 
-    return waitForScriptsReady('SP.js').then(function () {
-        //clearRequestDigest();
+	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            arrayOfResults = props.previousResults || [],
-            totalItemsPerTrip = props.maxPerTrip || 200,
-            totalItemsToGet = props.arrayOfIDs.length,
-            ii = props.numberToStartAt || 0,
-            listItemCollection = [],
-            list = clientContext.get_web().get_lists();
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+		    currentResults = props.allResults || [],
+		    totalItemsPerTrip = props.maxPerTrip || 100,
+		    totalItemsToGet = props.arrayOfIDs.length,
+		    ii = props.numberToStartAt || 0,
+		    listItemCollection = [],
+		    list;
 
-        if (props.listId) {
-            list = list.getById(props.listId);
-        } else {
-            list = list.getByTitle(props.listName);
-        }
+		if (props.listGUID) {
+			list = clientContext.get_web().get_lists().getById(props.listGUID);
+		} else {
+			list = clientContext.get_web().get_lists().getByTitle(props.listTitle);
+		}
 
-        while (ii < totalItemsToGet) {
-            var item = list.getItemById(props.arrayOfIDs[ii]);
-            if (props.columnsToInclude) {
-                //Include('properties') does not work here;
-                clientContext.load(item, props.columnsToInclude);
-            } else {
-                clientContext.load(item);
-            }
-            listItemCollection.push(item);
+		while (ii < totalItemsToGet) {
+			var item = list.getItemById(props.arrayOfIDs[ii]);
+			if (props.columnsToInclude) {
+				//Include('properties') does not work here;
+				clientContext.load(item, props.columnsToInclude);
+			} else {
+				clientContext.load(item);
+			}
+			listItemCollection.push(item);
 
-            if (listItemCollection.length === totalItemsPerTrip) {
-                ii++;
-                break;
-            } else {
-                ii++;
-                continue;
-            }
-        }
+			if (listItemCollection.length === totalItemsPerTrip) {
+				ii++;
+				break;
+			} else {
+				ii++;
+				continue;
+			}
+		}
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            listItems: listItemCollection
-        }).then(function (data) {
-            var cleanedResults = jsomToObj(data.listItems),
-                combinedArray = arrayOfResults.concat(cleanedResults);
+		return jsomSendDataToServer({
+			context: clientContext,
+			listItems: listItemCollection
+		}).then(function (data) {
+			var cleanedResults = jsomListItemDataExtractor(data.listItems);
 
-            if (ii < totalItemsToGet) {
-                props.numberToStartAt = ii;
-                props.previousResults = combinedArray;
-                return jsomGetItemsById(props);
-            }
+			props.allResults = currentResults.concat(cleanedResults);
 
-            return combinedArray;
-        });
-    });
+			if (ii < totalItemsToGet) {
+				props.numberToStartAt = ii;
+				return jsomGetItemsById(props);
+			}
+
+			return props.allResults;
+		});
+	});
 }
+/**
+ * Retrieves file data by relative url
+ * url is a site relative url
+ * fileRefs is an array of relative urls of the files
+ * columnToInclude is an array of column names that you want to retrieve, optional
+ * @param {{url:string, fileRefs:string[], columnsToInclude:string[]}} props
+ * @returns {promise}
+ */
 function jsomGetFilesByRelativeUrl(props) {
-    //props is obj {url, fileRefs, numberToStartAt columnsToInclude}
 
-    return waitForScriptsReady('SP.js').then(function () {
-        //clearRequestDigest();
+	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
-        var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
-            web = clientContext.get_web(),
-            totalItemsToGet = props.fileRefs.length,
-            ii = 0,
-            fileObjCollection = [];
+		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
+		    web = clientContext.get_web(),
+		    totalItemsToGet = props.fileRefs.length,
+		    ii = 0,
+		    fileObjCollection = [];
 
-        while (ii < totalItemsToGet) {
-            var file = web.getFileByServerRelativeUrl(props.fileRefs[ii]);
-            if (props.columnsToInclude) {
-                //Include('properties') does not work here;
-                clientContext.load(file, props.columnsToInclude);
-            } else {
-                clientContext.load(file);
-            }
-            fileObjCollection.push(file);
-            ii++;
-        }
+		while (ii < totalItemsToGet) {
+			var file = web.getFileByServerRelativeUrl(props.fileRefs[ii]);
+			if (props.columnsToInclude) {
+				//Include('properties') does not work here;
+				clientContext.load(file, props.columnsToInclude);
+			} else {
+				clientContext.load(file);
+			}
+			fileObjCollection.push(file);
+			ii++;
+		}
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            files: fileObjCollection
-        }).then(function (data) {
-            return data;
-        });
-    });
+		return jsomSendDataToServer({
+			context: clientContext,
+			files: fileObjCollection
+		}).then(function (data) {
+			return data;
+		});
+	});
 }
-function jsomTaxonomyRequest(termSetID) {
-    //item.IsAvailableForTagging
-    return (0, _pdSputil.loadSPScript)('sp.taxonomy.js').then(function () {
-        //clearRequestDigest();
+/**
+ * Retrieves term store terms based on termSetId
+ * @param {string} termStoreId 
+ * @param {string} termSetId
+ * @return {promise}
+ */
+function jsomTaxonomyRequest(termStoreId, termSetId) {
+	//item.IsAvailableForTagging
+	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+		var tax = void 0;
 
-        var clientContext = new SP.ClientContext.get_current(),
-            taxonomySession = SP.Taxonomy.TaxonomySession.getTaxonomySession(clientContext),
-            termStore = taxonomySession.get_termStores().getById("5b7c889a745c4087bccb796372e50d36"),
-            termSet = termStore.getTermSet(termSetID),
-            terms = termSet.getAllTerms();
+		if (sp.taxonomy) {
+			//already loaded
+			tax = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]().resolve();
+		} else {
+			tax = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["loadSPScript"])('sp.taxonomy.js');
+		}
+		return tax;
+	}).then(function () {
+		// termStoreId ex - "5b7c889a745c4087bccb796372e50d36"
 
-        clientContext.load(terms, 'Include(CustomProperties, Id,' + 'IsAvailableForTagging, LocalCustomProperties, Name, PathOfTerm)');
+		var clientContext = new SP.ClientContext.get_current(),
+		    taxonomySession = SP.Taxonomy.TaxonomySession.getTaxonomySession(clientContext),
+		    termStore = taxonomySession.get_termStores().getById(termStoreId),
+		    termSet = termStore.getTermSet(termSetId),
+		    terms = termSet.getAllTerms();
 
-        return jsomSendDataToServer({
-            context: clientContext,
-            terms: terms
-        });
-    });
+		clientContext.load(terms, 'Include(CustomProperties, Id,' + 'IsAvailableForTagging, LocalCustomProperties, Name, PathOfTerm)');
+
+		return jsomSendDataToServer({
+			context: clientContext,
+			terms: terms
+		});
+	});
 }
+/**
+ * Sends data to server
+ * must have a context key
+ * there can be a secondary key, ex listItems
+ * the object that is passed will be return on resolve
+ * @param {{context:object}} serverData 
+ * @returns {promise}
+ */
 function jsomSendDataToServer(serverData) {
-    var def = $.Deferred();
+	var def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]();
 
-    serverData.context.executeQueryAsync(function () {
-        //success
-        def.resolve(serverData);
-    }, function () {
-        def.reject(arguments);
-    }); //end QueryAsync
-    return def.promise();
+	serverData.context.executeQueryAsync(function () {
+		//success
+		def.resolve(serverData);
+	}, function () {
+		def.reject(arguments);
+	}); //end QueryAsync
+	return def.promise();
 }
-function jsomListItemDataExtractor(listItemCollection) {
+/**
+ * Class that allows for batch create, update, recycle, delete
+ */
+var jsomCUD = function () {
+	function jsomCUD() {
+		_classCallCheck(this, jsomCUD);
 
-    return jsomToObj(listItemCollection);
-}
+		this.itemsToSend = [];
+		this.userRequests = [];
+	}
+
+	_createClass(jsomCUD, [{
+		key: '_getContext',
+		value: function _getContext(site) {
+
+			if (site) {
+				this.context = new this.sp.ClientContext(this.siteUrl);
+			} else {
+				this.context = new this.sp.ClientContext.get_current();
+			}
+		}
+	}, {
+		key: '_getList',
+		value: function _getList(listId) {
+			var isGuid = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["validGuid"])(this.listId);
+
+			if (isGuid) {
+				this.list = this.context.get_web().get_lists().getById(listId);
+			} else {
+				this.list = this.context.get_web().get_lists().getByTitle(listId);
+			}
+		}
+	}, {
+		key: '_dataTranmitter',
+		value: function _dataTranmitter() {
+
+			return jsomSendDataToServer({
+				context: this.context,
+				listItems: this.itemsToSend
+			});
+		}
+	}, {
+		key: '_addColumnData',
+		value: function _addColumnData(listItem, colData) {
+			var _this = this;
+
+			colData.forEach(function (colObj) {
+
+				if (colObj.dataType === 'taxBlank') {
+
+					var taxColObj = _this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					    taxField = _this.context.castTo(taxColObj, _this.sp.Taxonomy.TaxonomyField);
+
+					taxField.validateSetValue(listItem, null);
+				} else if (colObj.dataType === 'taxSingle') {
+					var _taxColObj = _this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					    _taxField = _this.context.castTo(_taxColObj, _this.sp.Taxonomy.TaxonomyField);
+
+					var taxonomySingle = new _this.sp.Taxonomy.TaxonomyFieldValue();
+					taxonomySingle.set_label(colObj.termLabel);
+					taxonomySingle.set_termGuid(colObj.termGuid);
+					taxonomySingle.set_wssId(-1);
+					_taxField.setFieldValueByValue(listItem, taxonomySingle);
+				} else if (colObj.dataType === 'taxMulti') {
+					var _taxColObj2 = _this.list.get_fields().getByInternalNameOrTitle(colObj.columnName),
+					    _taxField2 = _this.context.castTo(_taxColObj2, _this.sp.Taxonomy.TaxonomyField),
+					    termPrep = colObj.multiTerms.map(function (termInfo) {
+						//-1;#Mamo|10d05b55-6ae5-413b-9fe6-ff11b9b5767c
+						return '-1;# ' + termInfo.termLabel + '|' + termInfo.termGuid;
+					});
+
+					var terms = _this.sp.Taxonomy.TaxonomyFieldValueCollection(termPrep.join(';#'), _taxField2);
+
+					_taxField2.setFieldValueByValueCollection(listItem, terms);
+				} else if (colObj.dataType === 'choiceMulti') {
+					listItem.set_item(colObj.columnName, colObj.choices);
+				} else if (colObj.dataType === 'lookupSingle') {
+					var lookupVal = new _this.sp.FieldLookupValue();
+					lookupVal.set_lookupId(colObj.itemId);
+					listItem.set_item(colObj.columnName, lookupVal);
+				} else if (colObj.dataType === 'lookupMulti') {
+					var multiLookupVal = colObj.idArray.map(function (ppId) {
+						return _this.sp.FieldUserValue.fromUser(ppId);
+					});
+					listItem.set_item(colObj.columnName, multiLookupVal);
+				} else if (colObj.dataType === 'ppSingle') {
+					var ppVal = _this.sp.FieldUserValue.fromUser(colObj.acct);
+					listItem.set_item(colObj.columnName, ppVal);
+				} else if (colObj.dataType === 'ppMulti') {
+					var multiPPVal = colObj.acctArray.map(function (ppId) {
+						var lookupValue = new _this.sp.FieldLookupValue();
+						return lookupValue.set_lookupId(ppId);
+					});
+					listItem.set_item(colObj.columnName, multiPPVal);
+				} else if (colObj.dataType === 'hyperlink') {
+					var hyperLink = new _this.sp.FieldUrlValue();
+					hyperLink.set_url(colObj.url);
+					hyperLink.set_description(colObj.description);
+					listItem.set_item(colObj.columnName, hyperLink);
+				} else if (colObj.dataType === 'simple') {
+					listItem.set_item(colObj.columnName, colObj.columnValue);
+				}
+			}, this);
+		}
+	}, {
+		key: '_loadItem',
+		value: function _loadItem(listItem) {
+			var nextIndex = this.itemsToSend.length;
+
+			listItem.update();
+			this.itemsToSend[nextIndex] = listItem;
+			this.context.load(this.itemsToSend[nextIndex]);
+		}
+	}, {
+		key: '_createListItems',
+		value: function _createListItems() {
+			var _this2 = this;
+
+			this.userRequests.forEach(function (obj) {
+				var listItem = null;
+				if (obj.action === 'create') {
+					listItem = new _this2.sp.ListItemCreationInformation();
+					_this2._addColumnData()._loadItem();
+				} else if (obj.action === 'update') {
+					listItem = _this2.list.getItemById(obj.itemId);
+					_this2._addColumnData()._loadItem();
+				} else if (obj.action === 'recycle') {
+					listItem = _this2.list.getItemById(obj.itemId);
+					listItem.recycle();
+				} else if (obj.action === 'delete') {
+					listItem = _this2.list.getItemById(obj.itemId);
+					listItem.deleteObject();
+				}
+			}, this);
+		}
+	}, {
+		key: '_determineDataType',
+		value: function _determineDataType(value) {
+
+			if (value.termGuid === null) {
+				//blanks out the field
+				//value.termGuid: null
+				value.dataType = 'taxBlank';
+			} else if (value.termGuid) {
+				//adds single value to field
+				//value.termLabel: string
+				//value.termGuid: string guid
+				value.dataType = 'taxSingle';
+			} else if (value.multiTerms) {
+				//add multiple terms to field
+				//value.multiTerms: [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+				value.dataType = 'taxMulti';
+			} else if (value.choices) {
+				//adds multiple choices to field
+				//value.choices: ['one','two','three']
+				value.dataType = 'choiceMulti';
+			} else if (value.itemId) {
+				//adds single value to field
+				//value.itemId: number
+				value.dataType = 'lookupSingle';
+			} else if (value.idArray) {
+				//adds multiple items to field
+				//value.idArray: [1,2,3]
+				value.dataType = 'lookupMulti';
+			} else if (value.acct) {
+				//adds single employee to field
+				//value.acct: someone@onmicrosoft.com  acct can be email or account name
+				value.dataType = 'ppSingle';
+			} else if (value.acctArray) {
+				//adds multiple employees to field
+				//value.acctArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
+				value.dataType = 'ppMulti';
+			} else if (value.url) {
+				//pictue or hyperlink field
+				//value.url: string
+				//value.description: string 
+				value.dataType = 'hyperlink';
+			} else {
+				//all other types
+				//value.columnValue
+				value.dataType = 'simple';
+			}
+		}
+	}, {
+		key: '_addDataType',
+		value: function _addDataType(colInfo) {
+			var _this3 = this;
+
+			var fixedData = [];
+
+			colInfo.forEach(function (item) {
+				var copy = Object.assign({}, item);
+				_this3._determineDataType(copy);
+				fixedData.push(copy);
+			});
+
+			return fixedData;
+		}
+		/**
+   * Add an item to be sent to a list.
+   * column info is an array of objects that contain the data to construct the list item
+   * if the item is not create then itemId is required
+   * if action is delete or recycle then no columnInfo is needed just the id
+   * 
+   * for create or update column data should be passed as follows
+   * every columnInfo object must contain columnName
+   * if single tax field add termLabel and termGuid to column object
+   * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+   * if multi choice field add choices to column object, ['one','two','three']
+   * if single lookup field add itemId to column object, will contain id number
+   * if multi lookup field add idArray to column object, [1,2,3]
+   * if single person field add account to column object, account is email or account name
+   * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+   * if hyperlink field add url and description to column object
+   * if none of these match your column type then pass the data to be stored as columnValue
+   * @param {string} action create, update, recycle or delete 
+   * @param {number} itemId id of the item to update, recycle or delete 
+   * @param {object[]} columnInfo array of objs to send to the server, there must be a object for each column
+   */
+
+	}, {
+		key: 'addItem',
+		value: function addItem(action, columnInfo, itemId) {
+
+			var prepedObj = {};
+
+			if (!action) {
+				throw new Error('action must be provided to add an object to addItem function');
+			}
+			prepedObj.action = action.toLowerCase();
+
+			if (action !== 'create' && !itemId) {
+				throw new Error('a item id must be provided to update, delete or recycle an item');
+			}
+			prepedObj.itemId = itemId;
+
+			//after you call this method you will have an array of objs
+			//objs will be {columnName: , columnData: , dataType: }
+			prepedObj.columnData = this._addDataType(columnInfo);
+
+			this.userRequests.push(prepedObj);
+		}
+		/**
+   * Sends the data added with addItem method to the server
+   * @param {string} site relative site url 
+   * @param {string} listId guid or title of the list
+   */
+
+	}, {
+		key: 'sendToSever',
+		value: function sendToSever(site, listId) {
+			//make sure everything is in place before doing process
+			var def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"](),
+			    self = this;
+
+			__webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+				self.sp = SP;
+
+				self._getContext(site)._getList(listId)._createListItems();
+
+				return self._dataTranmitter();
+			}).then(function (response) {
+				def.resolve(response);
+			}).fail(function (data) {
+				def.reject(data);
+			});
+
+			return def.promise();
+		}
+	}]);
+
+	return jsomCUD;
+}();
 
 /***/ })
 /******/ ]);
 });
-//# sourceMappingURL=pd-spserverjsom.js.map
