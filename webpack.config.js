@@ -7,20 +7,7 @@ const env  = require('yargs').argv.env;
 let entryPoint = './src/library.js';
 let plugins = [];
 let output = null;
-let external = {
-    jquery: {
-        commonjs: 'jquery',
-        commonjs2: 'jquery',
-        amd: 'jquery',
-        root: '$'
-    },
-    'pd-sputil': {
-        commonjs: 'pd-sputil',
-        commonjs2: 'pd-sputil',
-        amd: 'pd-sputil',
-        root: 'pdsputil'
-    }
-};
+let external = {};
 
 if (env === 'dev' || env === 'build') {
     entryPoint = './src/library.js';
@@ -29,6 +16,19 @@ if (env === 'dev' || env === 'build') {
         filename: `${packageData.name}.js`,
         libraryTarget: 'umd',
         library: 'pdspserverjsom' //this will be the global variable to hook into
+    };
+
+    external.jquery = {
+        commonjs: 'jquery',
+        commonjs2: 'jquery',
+        amd: 'jquery',
+        root: '$'
+    };
+    external['pd-sputil'] = {
+        commonjs: 'pd-sputil',
+        commonjs2: 'pd-sputil',
+        amd: 'pd-sputil',
+        root: 'pdsputil'
     };
 }
 if(env === 'build') {
