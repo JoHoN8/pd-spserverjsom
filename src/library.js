@@ -423,19 +423,21 @@ export class jsomCUD{
 	_getContext(site) {
 
 		if(site) {
-			this.context = new this.sp.ClientContext(this.siteUrl);
+			this.context = new this.sp.ClientContext(site);
 		} else {
 			this.context = new this.sp.ClientContext.get_current();
 		}
+		return this;
 	}
 	_getList(listId) {
-		var isGuid = validGuid(this.listId);
+		var isGuid = validGuid(listId);
 
 		if (isGuid) {
 			this.list = this.context.get_web().get_lists().getById(listId);
 		} else {
 			this.list = this.context.get_web().get_lists().getByTitle(listId);
 		}
+		return this;
 	}
 	_dataTranmitter() {
 		
@@ -492,11 +494,11 @@ export class jsomCUD{
 				listItem.set_item(colObj.columnName, multiLookupVal);
 			}
 			else if (colObj.dataType === 'ppSingle') {
-				let ppVal = this.sp.FieldUserValue.fromUser(colObj.acct);
+				let ppVal = this.sp.FieldUserValue.fromUser(colObj.account);
 				listItem.set_item(colObj.columnName, ppVal);
 			}
 			else if (colObj.dataType === 'ppMulti') {
-				let multiPPVal = colObj.acctArray.map((ppId) => {
+				let multiPPVal = colObj.accountArray.map((ppId) => {
 					let lookupValue = new this.sp.FieldLookupValue();
 					return lookupValue.set_lookupId(ppId);
 				});
@@ -511,6 +513,7 @@ export class jsomCUD{
 				listItem.set_item(colObj.columnName, colObj.columnValue);
 			}
 		}, this);
+		return this;
 
 	}
 	_loadItem(listItem) {
@@ -519,17 +522,19 @@ export class jsomCUD{
 		listItem.update();
 		this.itemsToSend[nextIndex] = listItem;
 		this.context.load(this.itemsToSend[nextIndex]);
+
+		return this;
 	}
 	_createListItems() {
 
 		this.userRequests.forEach((obj) => {
 			let listItem = null;
 			if (obj.action === 'create') {
-				listItem = new this.sp.ListItemCreationInformation();
-				this._addColumnData()._loadItem();
+				listItem = this.list.addItem(new this.sp.ListItemCreationInformation());
+				this._addColumnData(listItem, obj.columnData)._loadItem(listItem);
 			} else if (obj.action === 'update') {
 				listItem = this.list.getItemById(obj.itemId);
-				this._addColumnData()._loadItem();
+				this._addColumnData(listItem, obj.columnData)._loadItem(listItem);
 			} else  if (obj.action === 'recycle') {
 				listItem = this.list.getItemById(obj.itemId);  
 				listItem.recycle();
@@ -538,6 +543,8 @@ export class jsomCUD{
 				listItem.deleteObject();
 			}
 		}, this);
+
+		return this;
 	}
 	_determineDataType(value) {
 
@@ -566,13 +573,13 @@ export class jsomCUD{
 			//adds multiple items to field
 			//value.idArray: [1,2,3]
 			value.dataType = 'lookupMulti';
-		} else if (value.acct) {
+		} else if (value.account) {
 			//adds single employee to field
-			//value.acct: someone@onmicrosoft.com  acct can be email or account name
+			//value.account: someone@onmicrosoft.com  account can be email or account name
 			value.dataType = 'ppSingle';
-		} else if (value.acctArray) {
+		} else if (value.accountArray) {
 			//adds multiple employees to field
-			//value.acctArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
+			//value.accountArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
 			value.dataType = 'ppMulti';
 		} else if (value.url) {
 			//pictue or hyperlink field
@@ -617,7 +624,7 @@ export class jsomCUD{
 	 * @param {number} itemId id of the item to update, recycle or delete 
 	 * @param {object[]} columnInfo array of objs to send to the server, there must be a object for each column
 	 */
-	addItem(action, columnInfo, itemId) {
+	_addItem(action, columnInfo, itemId) {
 
 		let prepedObj = {};
 
@@ -633,9 +640,92 @@ export class jsomCUD{
 
 		//after you call this method you will have an array of objs
 		//objs will be {columnName: , columnData: , dataType: }
-		prepedObj.columnData = this._addDataType(columnInfo);
+		if (action === 'create' || action === 'update') {
+			prepedObj.columnData = this._addDataType(columnInfo);
+		}
 
 		this.userRequests.push(prepedObj);
+	}
+	/**
+	 * Adds a create operation to the queue
+	 * columnInfo is an array of objects that contain the data to updates the list item
+	 * 
+	 * column data should be passed as follows
+	 * every columnInfo object must contain columnName
+	 * if single tax field add termLabel and termGuid to column object
+	 * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+	 * if multi choice field add choices to column object, ['one','two','three']
+	 * if single lookup field add itemId to column object, will contain id number
+	 * if multi lookup field add idArray to column object, [1,2,3]
+	 * if single person field add account to column object, account is email or account name
+	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+	 * if hyperlink field add url and description to column object
+	 * if none of these match your column type then pass the data to be stored as columnValue
+	 * @param {number} itemId 
+	 * @param {object[]} columnInfo
+	 */
+	createItem(columnInfo) {
+		this._addItem('create', columnInfo);
+	}
+	/**
+	 * Adds a update operation to the queue
+	 * columnInfo is an array of objects that contain the data to updates the list item
+	 * 
+	 * column data should be passed as follows
+	 * every columnInfo object must contain columnName
+	 * if single tax field add termLabel and termGuid to column object
+	 * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+	 * if multi choice field add choices to column object, ['one','two','three']
+	 * if single lookup field add itemId to column object, will contain id number
+	 * if multi lookup field add idArray to column object, [1,2,3]
+	 * if single person field add account to column object, account is email or account name
+	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+	 * if hyperlink field add url and description to column object
+	 * if none of these match your column type then pass the data to be stored as columnValue
+	 * @param {number} itemId 
+	 * @param {object[]} columnInfo
+	 */
+	updateItem(itemId, columnInfo) {
+		this._addItem('update', columnInfo, itemId);
+	}
+	/**
+	 * Adds a recycle operation to the queue
+	 * itemId can be a number or an array of number to recycle
+	 * @param {number|number[]} itemId 
+	 */
+	recycleItem(itemId) {
+
+		let type = getDataType(itemId);
+
+		if(type === 'number') {
+			this._addItem('recycle', null, itemId);
+		} else if (type === 'array') {
+			itemId.forEach((id) => {
+				this._addItem('recycle', null, id);
+			}, this);
+		} else {
+			throw new Error('invalid datatype passed to recycle item function');
+		}
+	}
+	/**
+	 * Adds a delete operation to the queue
+	 * itemId can be a number or an array of number to recycle
+	 * WARNING deleting an item skips the recycle bin and is unrecoverable
+	 * @param {number|number[]} itemId 
+	 */
+	deleteItem(itemId) {
+
+		let type = getDataType(itemId);
+
+		if(type === 'number') {
+			this._addItem('delete', null, itemId);
+		} else if (type === 'array') {
+			itemId.forEach((id) => {
+				this._addItem('delete', null, id);
+			}, this);
+		} else {
+			throw new Error('invalid datatype passed to delete item function');
+		}
 	}
 	/**
 	 * Sends the data added with addItem method to the server

@@ -154,16 +154,7 @@ var jsomListItemDataExtractor = function jsomListItemDataExtractor(spItemCollect
 	});
 	return cleanArray;
 };
-
-/**
- * Retrieves data from the SP search index
- * url is a relative url
- * trimDuplicates, rowLimit and startRow is optional
- * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
- * @returns {promise}
- */
-function jsomGetDataFromSearch(props) {
-
+var fromSearchWorker = function fromSearchWorker(props) {
 	var scriptCheck = null;
 	var currentResults = props.allResults || [];
 	var glob = Microsoft.SharePoint.Client;
@@ -176,7 +167,7 @@ function jsomGetDataFromSearch(props) {
 	return scriptCheck.then(function () {
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext('/search'),
-		    keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
+		    keywordQuery = new Microsoft.SharePoint.Client.Search.Query.KeywordQuery(clientContext);
 
 		if (!props.startRow) {
 			props.startRow = 0;
@@ -209,14 +200,31 @@ function jsomGetDataFromSearch(props) {
 		    requestProps = tableData.ResultTables[0],
 		    results = requestProps.ResultRows;
 
-		props.allResults = currentResults.concat(results.ResultRows);
+		if (results.length === 0) {
+			props.allResults = [];
+		} else {
+			props.allResults = currentResults.concat(results);
+		}
 
 		if (requestProps.TotalRows > props.startRow + requestProps.RowCount) {
 			props.startRow = props.startRow + requestProps.RowCount;
-			return jsomGetDataFromSearch(props, allResults);
+			return fromSearchWorker(props);
 		} else {
 			return props.allResults;
 		}
+	});
+};
+
+/**
+ * Retrieves data from the SP search index
+ * url is a relative url
+ * trimDuplicates, rowLimit and startRow is optional
+ * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
+ * @returns {promise}
+ */
+function jsomGetDataFromSearch(props) {
+	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+		return fromSearchWorker(props);
 	});
 }
 /**
@@ -282,7 +290,7 @@ function jsomListItemRequest(props) {
  */
 function jsomEnsureUser(url, user) {
 
-	var datatype = datatype(user),
+	var datatype = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(user),
 	    startStringCheck = /^i:0#\.f\|membership\|/,
 	    verifiedUsers = [],
 	    usersToVerify,
@@ -356,7 +364,7 @@ function jsomGetItemsById(props) {
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 		    currentResults = props.allResults || [],
 		    totalItemsPerTrip = props.maxPerTrip || 100,
-		    totalItemsToGet = props.arrayOfIDs.length,
+		    totalItemsToGet = props.arrayOfIds.length,
 		    ii = props.numberToStartAt || 0,
 		    listItemCollection = [],
 		    list;
@@ -368,7 +376,7 @@ function jsomGetItemsById(props) {
 		}
 
 		while (ii < totalItemsToGet) {
-			var item = list.getItemById(props.arrayOfIDs[ii]);
+			var item = list.getItemById(props.arrayOfIds[ii]);
 			if (props.columnsToInclude) {
 				//Include('properties') does not work here;
 				clientContext.load(item, props.columnsToInclude);
@@ -452,7 +460,7 @@ function jsomTaxonomyRequest(termStoreId, termSetId) {
 	return __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
 		var tax = void 0;
 
-		if (sp.taxonomy) {
+		if (SP.Taxonomy) {
 			//already loaded
 			tax = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]().resolve();
 		} else {
@@ -511,21 +519,23 @@ var jsomCUD = function () {
 		value: function _getContext(site) {
 
 			if (site) {
-				this.context = new this.sp.ClientContext(this.siteUrl);
+				this.context = new this.sp.ClientContext(site);
 			} else {
 				this.context = new this.sp.ClientContext.get_current();
 			}
+			return this;
 		}
 	}, {
 		key: '_getList',
 		value: function _getList(listId) {
-			var isGuid = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["validGuid"])(this.listId);
+			var isGuid = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["validGuid"])(listId);
 
 			if (isGuid) {
 				this.list = this.context.get_web().get_lists().getById(listId);
 			} else {
 				this.list = this.context.get_web().get_lists().getByTitle(listId);
 			}
+			return this;
 		}
 	}, {
 		key: '_dataTranmitter',
@@ -581,10 +591,10 @@ var jsomCUD = function () {
 					});
 					listItem.set_item(colObj.columnName, multiLookupVal);
 				} else if (colObj.dataType === 'ppSingle') {
-					var ppVal = _this.sp.FieldUserValue.fromUser(colObj.acct);
+					var ppVal = _this.sp.FieldUserValue.fromUser(colObj.account);
 					listItem.set_item(colObj.columnName, ppVal);
 				} else if (colObj.dataType === 'ppMulti') {
-					var multiPPVal = colObj.acctArray.map(function (ppId) {
+					var multiPPVal = colObj.accountArray.map(function (ppId) {
 						var lookupValue = new _this.sp.FieldLookupValue();
 						return lookupValue.set_lookupId(ppId);
 					});
@@ -598,6 +608,7 @@ var jsomCUD = function () {
 					listItem.set_item(colObj.columnName, colObj.columnValue);
 				}
 			}, this);
+			return this;
 		}
 	}, {
 		key: '_loadItem',
@@ -607,6 +618,8 @@ var jsomCUD = function () {
 			listItem.update();
 			this.itemsToSend[nextIndex] = listItem;
 			this.context.load(this.itemsToSend[nextIndex]);
+
+			return this;
 		}
 	}, {
 		key: '_createListItems',
@@ -616,11 +629,11 @@ var jsomCUD = function () {
 			this.userRequests.forEach(function (obj) {
 				var listItem = null;
 				if (obj.action === 'create') {
-					listItem = new _this2.sp.ListItemCreationInformation();
-					_this2._addColumnData()._loadItem();
+					listItem = _this2.list.addItem(new _this2.sp.ListItemCreationInformation());
+					_this2._addColumnData(listItem, obj.columnData)._loadItem(listItem);
 				} else if (obj.action === 'update') {
 					listItem = _this2.list.getItemById(obj.itemId);
-					_this2._addColumnData()._loadItem();
+					_this2._addColumnData(listItem, obj.columnData)._loadItem(listItem);
 				} else if (obj.action === 'recycle') {
 					listItem = _this2.list.getItemById(obj.itemId);
 					listItem.recycle();
@@ -629,6 +642,8 @@ var jsomCUD = function () {
 					listItem.deleteObject();
 				}
 			}, this);
+
+			return this;
 		}
 	}, {
 		key: '_determineDataType',
@@ -659,13 +674,13 @@ var jsomCUD = function () {
 				//adds multiple items to field
 				//value.idArray: [1,2,3]
 				value.dataType = 'lookupMulti';
-			} else if (value.acct) {
+			} else if (value.account) {
 				//adds single employee to field
-				//value.acct: someone@onmicrosoft.com  acct can be email or account name
+				//value.account: someone@onmicrosoft.com  account can be email or account name
 				value.dataType = 'ppSingle';
-			} else if (value.acctArray) {
+			} else if (value.accountArray) {
 				//adds multiple employees to field
-				//value.acctArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
+				//value.accountArray: [someone@onmicrosoft.com, someone2@onmicrosoft.com]  acct can be email or account name
 				value.dataType = 'ppMulti';
 			} else if (value.url) {
 				//pictue or hyperlink field
@@ -716,8 +731,8 @@ var jsomCUD = function () {
    */
 
 	}, {
-		key: 'addItem',
-		value: function addItem(action, columnInfo, itemId) {
+		key: '_addItem',
+		value: function _addItem(action, columnInfo, itemId) {
 
 			var prepedObj = {};
 
@@ -733,9 +748,106 @@ var jsomCUD = function () {
 
 			//after you call this method you will have an array of objs
 			//objs will be {columnName: , columnData: , dataType: }
-			prepedObj.columnData = this._addDataType(columnInfo);
+			if (action === 'create' || action === 'update') {
+				prepedObj.columnData = this._addDataType(columnInfo);
+			}
 
 			this.userRequests.push(prepedObj);
+		}
+		/**
+   * Adds a create operation to the queue
+   * columnInfo is an array of objects that contain the data to updates the list item
+   * 
+   * column data should be passed as follows
+   * every columnInfo object must contain columnName
+   * if single tax field add termLabel and termGuid to column object
+   * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+   * if multi choice field add choices to column object, ['one','two','three']
+   * if single lookup field add itemId to column object, will contain id number
+   * if multi lookup field add idArray to column object, [1,2,3]
+   * if single person field add account to column object, account is email or account name
+   * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+   * if hyperlink field add url and description to column object
+   * if none of these match your column type then pass the data to be stored as columnValue
+   * @param {number} itemId 
+   * @param {object[]} columnInfo
+   */
+
+	}, {
+		key: 'createItem',
+		value: function createItem(columnInfo) {
+			this._addItem('create', columnInfo);
+		}
+		/**
+   * Adds a update operation to the queue
+   * columnInfo is an array of objects that contain the data to updates the list item
+   * 
+   * column data should be passed as follows
+   * every columnInfo object must contain columnName
+   * if single tax field add termLabel and termGuid to column object
+   * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+   * if multi choice field add choices to column object, ['one','two','three']
+   * if single lookup field add itemId to column object, will contain id number
+   * if multi lookup field add idArray to column object, [1,2,3]
+   * if single person field add account to column object, account is email or account name
+   * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+   * if hyperlink field add url and description to column object
+   * if none of these match your column type then pass the data to be stored as columnValue
+   * @param {number} itemId 
+   * @param {object[]} columnInfo
+   */
+
+	}, {
+		key: 'updateItem',
+		value: function updateItem(itemId, columnInfo) {
+			this._addItem('update', columnInfo, itemId);
+		}
+		/**
+   * Adds a recycle operation to the queue
+   * itemId can be a number or an array of number to recycle
+   * @param {number|number[]} itemId 
+   */
+
+	}, {
+		key: 'recycleItem',
+		value: function recycleItem(itemId) {
+			var _this4 = this;
+
+			var type = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(itemId);
+
+			if (type === 'number') {
+				this._addItem('recycle', null, itemId);
+			} else if (type === 'array') {
+				itemId.forEach(function (id) {
+					_this4._addItem('recycle', null, id);
+				}, this);
+			} else {
+				throw new Error('invalid datatype passed to recycle item function');
+			}
+		}
+		/**
+   * Adds a delete operation to the queue
+   * itemId can be a number or an array of number to recycle
+   * WARNING deleting an item skips the recycle bin and is unrecoverable
+   * @param {number|number[]} itemId 
+   */
+
+	}, {
+		key: 'deleteItem',
+		value: function deleteItem(itemId) {
+			var _this5 = this;
+
+			var type = __webpack_require__.i(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(itemId);
+
+			if (type === 'number') {
+				this._addItem('delete', null, itemId);
+			} else if (type === 'array') {
+				itemId.forEach(function (id) {
+					_this5._addItem('delete', null, id);
+				}, this);
+			} else {
+				throw new Error('invalid datatype passed to delete item function');
+			}
 		}
 		/**
    * Sends the data added with addItem method to the server
