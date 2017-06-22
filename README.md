@@ -11,7 +11,7 @@ These instructions will get you a copy of the project up and running on your loc
 
 ## Authors
 
-* **Jered McGlohon** - *Initial work* - [PurpleBooth](https://github.com/JoHoN8)
+* **Jered McGlohon** - *Initial work* - [JOHON8](https://github.com/JoHoN8)
 
 ## License
 
