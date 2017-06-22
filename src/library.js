@@ -51,16 +51,7 @@ const jsomListItemDataExtractor = function(spItemCollection) {
 	});
 	return cleanArray;
 };
-
-/**
- * Retrieves data from the SP search index
- * url is a relative url
- * trimDuplicates, rowLimit and startRow is optional
- * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
- * @returns {promise}
- */
-export function jsomGetDataFromSearch(props) {
-
+const fromSearchWorker = function(props) {
 	let scriptCheck = null;
 	let currentResults = props.allResults || [];
 	let glob = Microsoft.SharePoint.Client;
@@ -73,7 +64,7 @@ export function jsomGetDataFromSearch(props) {
 	return scriptCheck.then(function() {
 
 		let clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext('/search'),
-			keywordQuery = new Microsoft.SharePoint.Client.Search.Query.keywordQuery(clientContext);
+			keywordQuery = new Microsoft.SharePoint.Client.Search.Query.KeywordQuery(clientContext);
 
 		if(!props.startRow) {
 			props.startRow = 0;
@@ -104,14 +95,33 @@ export function jsomGetDataFromSearch(props) {
 			requestProps = tableData.ResultTables[0],
 			results = requestProps.ResultRows;
 
-		props.allResults = currentResults.concat(results.ResultRows);
+		if(results.length === 0) {
+			props.allResults = [];
+		} else {
+			props.allResults = currentResults.concat(results);
+		}
+
 
 		if(requestProps.TotalRows > (props.startRow + requestProps.RowCount)) {
 			props.startRow = props.startRow + requestProps.RowCount;
-			return jsomGetDataFromSearch(props, allResults);
+			return fromSearchWorker(props);
 		} else {
 			return props.allResults;
 		}
+	});
+};
+
+/**
+ * Retrieves data from the SP search index
+ * url is a relative url
+ * trimDuplicates, rowLimit and startRow is optional
+ * @param {{url:string, query:string, sourceId:string, trimDuplicates:boolean, rowLimit:number, startRow:number}} props
+ * @returns {promise}
+ */
+export function jsomGetDataFromSearch(props) {
+	return waitForScriptsReady('sp.js')
+	.then(() => {
+		return fromSearchWorker(props);
 	});
 }
 /**
@@ -180,7 +190,7 @@ export function jsomListItemRequest(props) {
  */
 export function jsomEnsureUser(url, user) {
 
-	var datatype = datatype(user),
+	var datatype = getDataType(user),
 		startStringCheck = /^i:0#\.f\|membership\|/,
 		verifiedUsers = [],
 		usersToVerify,
@@ -257,7 +267,7 @@ export function jsomGetItemsById(props) {
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 			currentResults = props.allResults || [],
 			totalItemsPerTrip = props.maxPerTrip || 100,
-			totalItemsToGet = props.arrayOfIDs.length,
+			totalItemsToGet = props.arrayOfIds.length,
 			ii = props.numberToStartAt || 0,
 			listItemCollection = [],
 			list;
@@ -269,7 +279,7 @@ export function jsomGetItemsById(props) {
 		}
 
 		while (ii < totalItemsToGet) {
-			var item = list.getItemById( props.arrayOfIDs[ii] );
+			var item = list.getItemById( props.arrayOfIds[ii] );
 			if (props.columnsToInclude) {
 				//Include('properties') does not work here;
 				clientContext.load (item, props.columnsToInclude);
@@ -355,7 +365,7 @@ export function jsomTaxonomyRequest(termStoreId, termSetId) {
 	.then(() => {
 		let tax;
 
-		if(sp.taxonomy) {
+		if(SP.Taxonomy) {
 			//already loaded
 			tax = $.Deferred().resolve();
 		} else {

@@ -112,7 +112,6 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 /**
 	app name pd-spserverjsom
-	need to import ajax and use with getUserData
  */
 
 
