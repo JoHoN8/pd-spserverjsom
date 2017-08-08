@@ -648,7 +648,7 @@ export class jsomCUD{
 	}
 	/**
 	 * Adds a create operation to the queue
-	 * columnInfo is an array of objects that contain the data to updates the list item
+	 * columnInfo is an array of objects that contain the data to create the list item
 	 * 
 	 * column data should be passed as follows
 	 * every columnInfo object must contain columnName
@@ -727,6 +727,9 @@ export class jsomCUD{
 			throw new Error('invalid datatype passed to delete item function');
 		}
 	}
+	totalRequests() {
+		return this.userRequests.length;
+	}
 	/**
 	 * Sends the data added with addItem method to the server
 	 * @param {string} site relative site url 
@@ -756,3 +759,127 @@ export class jsomCUD{
 		return def.promise();
 	}
 }
+/**
+ * Create list items on a meter so you dont get throttled
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * columnInfo is an array of objects that contain the column data to create the list item
+ *
+ * column data should be passed as follows
+ * every columnInfo object must contain columnName
+ * if single tax field add termLabel and termGuid to column object
+ * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+ * if multi choice field add choices to column object, ['one','two','three']
+ * if single lookup field add itemId to column object, will contain id number
+ * if multi lookup field add idArray to column object, [1,2,3]
+ * if single person field add account to column object, account is email or account name
+ * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+ * if hyperlink field add url and description to column object
+ * if none of these match your column type then pass the data to be stored as columnValue
+ * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+ * @returns {promise} 
+ */
+export function jsomCreateItemsMetered(props) {
+	let processData = null;
+
+	if (!props.configured) {
+		let defaults = {
+			totalPerTrip: 50,
+			numberToStartAt: 0,
+			totalItems: props.columnInfo.length,
+			allItems: [],
+			configured: true
+		};
+		processData = Object.assign({}, defaults, pros);
+	} else {
+		processData = props;
+	}
+
+	let itemCreator = new jsomCUD(),
+		index = processData.numberToStartAt;
+
+	for (index; index < processData.totalItems; index++) {
+		
+		itemCreator.createItem(processData.columnInfo[index]);
+
+		if (itemCreator.totalRequests() === processData.totalPerTrip) {
+			index++;
+			break;
+		}
+	}
+
+	return itemCreator.sendToSever(props.url, props.listGUID)
+	.then(function(response) {
+		let results = response.listItems;
+		props.allItems = props.allItems.concat(results);
+
+		if (processData.numberToStartAt < props.totalItems) {
+			return jsomCreateItemsMetered(props);
+		}
+		return props.allItems;
+	});
+	
+}
+
+/**
+ * update list items on a meter so you dont get throttled
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * columnInfo is an array of objects that contain the column data to create the list item
+ *
+ * column data should be passed as follows
+ * every columnInfo object must contain columnName
+ * if single tax field add termLabel and termGuid to column object
+ * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+ * if multi choice field add choices to column object, ['one','two','three']
+ * if single lookup field add itemId to column object, will contain id number
+ * if multi lookup field add idArray to column object, [1,2,3]
+ * if single person field add account to column object, account is email or account name
+ * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+ * if hyperlink field add url and description to column object
+ * if none of these match your column type then pass the data to be stored as columnValue
+ * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+ * @returns {promise} 
+ */
+export function jsomCreateItemsMetered(props) {
+	let processData = null;
+
+	if (!props.configured) {
+		let defaults = {
+			totalPerTrip: 50,
+			numberToStartAt: 0,
+			totalItems: props.columnInfo.length,
+			allItems: [],
+			configured: true
+		};
+		processData = Object.assign({}, defaults, pros);
+	} else {
+		processData = props;
+	}
+
+	let itemCreator = new jsomCUD(),
+		index = processData.numberToStartAt;
+
+	for (index; index < processData.totalItems; index++) {
+		
+		itemCreator.createItem(processData.columnInfo[index]);
+
+		if (itemCreator.totalRequests() === processData.totalPerTrip) {
+			index++;
+			break;
+		}
+	}
+
+	return itemCreator.sendToSever(props.url, props.listGUID)
+	.then(function(response) {
+		let results = response.listItems;
+		props.allItems = props.allItems.concat(results);
+
+		if (processData.numberToStartAt < props.totalItems) {
+			return jsomCreateItemsMetered(props);
+		}
+		return props.allItems;
+	});
+	
+}
+
