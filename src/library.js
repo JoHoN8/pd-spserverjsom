@@ -859,7 +859,7 @@ export function jsomUpdateItemsMetered(props) {
 			allItems: [],
 			configured: true
 		};
-		processData = Object.assign({}, defaults, pros);
+		processData = Object.assign({}, defaults, props);
 	} else {
 		processData = props;
 	}
