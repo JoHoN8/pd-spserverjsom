@@ -661,15 +661,14 @@ export class jsomCUD{
 	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
 	 * if hyperlink field add url and description to column object
 	 * if none of these match your column type then pass the data to be stored as columnValue
-	 * @param {number} itemId 
 	 * @param {object[]} columnInfo
 	 */
 	createItem(columnInfo) {
 		this._addItem('create', columnInfo);
 	}
 	/**
-	 * Adds a update operation to the queue
-	 * columnInfo is an array of objects that contain the data to updates the list item
+	 * Adds a update operation to the queue<br>
+	 * columnInfo is an array of objects that contain the data to updates the list item<br>
 	 * 
 	 * column data should be passed as follows
 	 * every columnInfo object must contain columnName
@@ -763,8 +762,12 @@ export class jsomCUD{
  * Create list items on a meter so you dont get throttled
  * url is a site relative url
  * pass listGUID or listTitle not both
- * columnInfo is an array of objects that contain the column data to create the list item
- *
+ * columnInfo is an array of arrays. the inner array contains 
+ * objects that contain the column data to create the list item
+ * ex. [
+ * 		[{columnName: "some", columnValue: 3}], <--1 item created
+ * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
+ * 		]
  * column data should be passed as follows
  * every columnInfo object must contain columnName
  * if single tax field add termLabel and termGuid to column object
@@ -825,7 +828,11 @@ export function jsomCreateItemsMetered(props) {
  * update list items on a meter so you dont get throttled
  * url is a site relative url
  * pass listGUID or listTitle not both
- * columnInfo is an array of objects that contain the column data to create the list item
+ * updateInfo is an array of objects that contain the column data and item id to update
+ * ex [
+ * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
+ * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
+ * 		]
  *
  * column data should be passed as follows
  * every columnInfo object must contain columnName
@@ -838,17 +845,17 @@ export function jsomCreateItemsMetered(props) {
  * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
  * if hyperlink field add url and description to column object
  * if none of these match your column type then pass the data to be stored as columnValue
- * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+ * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
  * @returns {promise} 
  */
-export function jsomCreateItemsMetered(props) {
+export function jsomUpdateItemsMetered(props) {
 	let processData = null;
 
 	if (!props.configured) {
 		let defaults = {
 			totalPerTrip: 50,
 			numberToStartAt: 0,
-			totalItems: props.columnInfo.length,
+			totalItems: props.updateInfo.length,
 			allItems: [],
 			configured: true
 		};
@@ -861,8 +868,8 @@ export function jsomCreateItemsMetered(props) {
 		index = processData.numberToStartAt;
 
 	for (index; index < processData.totalItems; index++) {
-		
-		itemCreator.createItem(processData.columnInfo[index]);
+		let current = props.updateInfo[index];
+		itemCreator.updateItem(current.itemId, current.columnInfo);
 
 		if (itemCreator.totalRequests() === processData.totalPerTrip) {
 			index++;
@@ -876,7 +883,7 @@ export function jsomCreateItemsMetered(props) {
 		props.allItems = props.allItems.concat(results);
 
 		if (processData.numberToStartAt < props.totalItems) {
-			return jsomCreateItemsMetered(props);
+			return jsomUpdateItemsMetered(props);
 		}
 		return props.allItems;
 	});
