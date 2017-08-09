@@ -9,8 +9,8 @@
   },
   "license": "ISC",
   "dependencies": {
-    "jquery": "latest",
-    "pd-sputil": "^2.2.0"
+    "jquery": "2.2.4",
+    "pd-sputil": "^2.1.2"
   },
   "devDependencies": {
     "babel-core": "latest",
