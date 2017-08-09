@@ -113,11 +113,12 @@ const fromSearchWorker = function(props) {
 };
 const depCheck = function() {
 	try {
-		let check = Object.assign;
+		Object.assign;
 	} catch (error) {
 		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign. Please add to continue.");
 	}
 };
+depCheck();
 
 /**
  * Retrieves data from the SP search index
