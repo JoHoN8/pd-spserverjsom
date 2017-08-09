@@ -102,6 +102,8 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (immutable) */ __webpack_exports__["jsomTaxonomyRequest"] = jsomTaxonomyRequest;
 /* harmony export (immutable) */ __webpack_exports__["jsomSendDataToServer"] = jsomSendDataToServer;
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomCUD", function() { return jsomCUD; });
+/* harmony export (immutable) */ __webpack_exports__["jsomCreateItemsMetered"] = jsomCreateItemsMetered;
+/* harmony export (immutable) */ __webpack_exports__["jsomUpdateItemsMetered"] = jsomUpdateItemsMetered;
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery__ = __webpack_require__(0);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_jquery__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_pd_sputil__ = __webpack_require__(1);
@@ -112,6 +114,7 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 
 /**
 	app name pd-spserverjsom
+	requires a polyfill for Object.assign
  */
 
 
@@ -213,6 +216,13 @@ var fromSearchWorker = function fromSearchWorker(props) {
 			return props.allResults;
 		}
 	});
+};
+var depCheck = function depCheck() {
+	try {
+		var check = Object.assign;
+	} catch (error) {
+		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign. Please add to continue.");
+	}
 };
 
 /**
@@ -756,7 +766,7 @@ var jsomCUD = function () {
 		}
 		/**
    * Adds a create operation to the queue
-   * columnInfo is an array of objects that contain the data to updates the list item
+   * columnInfo is an array of objects that contain the data to create the list item
    * 
    * column data should be passed as follows
    * every columnInfo object must contain columnName
@@ -769,7 +779,6 @@ var jsomCUD = function () {
    * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
    * if hyperlink field add url and description to column object
    * if none of these match your column type then pass the data to be stored as columnValue
-   * @param {number} itemId 
    * @param {object[]} columnInfo
    */
 
@@ -779,8 +788,8 @@ var jsomCUD = function () {
 			this._addItem('create', columnInfo);
 		}
 		/**
-   * Adds a update operation to the queue
-   * columnInfo is an array of objects that contain the data to updates the list item
+   * Adds a update operation to the queue<br>
+   * columnInfo is an array of objects that contain the data to updates the list item<br>
    * 
    * column data should be passed as follows
    * every columnInfo object must contain columnName
@@ -849,6 +858,11 @@ var jsomCUD = function () {
 				throw new Error('invalid datatype passed to delete item function');
 			}
 		}
+	}, {
+		key: 'totalRequests',
+		value: function totalRequests() {
+			return this.userRequests.length;
+		}
 		/**
    * Sends the data added with addItem method to the server
    * @param {string} site relative site url 
@@ -880,6 +894,137 @@ var jsomCUD = function () {
 
 	return jsomCUD;
 }();
+/**
+ * Create list items on a meter so you dont get throttled
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * columnInfo is an array of arrays. the inner array contains 
+ * objects that contain the column data to create the list item
+ * ex. [
+ * 		[{columnName: "some", columnValue: 3}], <--1 item created
+ * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
+ * 		]
+ * column data should be passed as follows
+ * every columnInfo object must contain columnName
+ * if single tax field add termLabel and termGuid to column object
+ * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+ * if multi choice field add choices to column object, ['one','two','three']
+ * if single lookup field add itemId to column object, will contain id number
+ * if multi lookup field add idArray to column object, [1,2,3]
+ * if single person field add account to column object, account is email or account name
+ * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+ * if hyperlink field add url and description to column object
+ * if none of these match your column type then pass the data to be stored as columnValue
+ * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+ * @returns {promise} 
+ */
+function jsomCreateItemsMetered(props) {
+	var processData = null;
+
+	if (!props.configured) {
+		var defaults = {
+			totalPerTrip: 50,
+			numberToStartAt: 0,
+			totalItems: props.columnInfo.length,
+			allItems: [],
+			configured: true
+		};
+		processData = Object.assign({}, defaults, props);
+	} else {
+		processData = props;
+	}
+
+	var itemCreator = new jsomCUD(),
+	    index = processData.numberToStartAt;
+
+	for (index; index < processData.totalItems; index++) {
+
+		itemCreator.createItem(processData.columnInfo[index]);
+
+		var setupToCreate = itemCreator.totalRequests();
+		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
+			index++;
+			processData.numberToStartAt = index;
+			break;
+		}
+	}
+
+	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
+		var results = response.listItems;
+		processData.allItems = processData.allItems.concat(results);
+
+		if (processData.numberToStartAt < processData.totalItems) {
+			return jsomCreateItemsMetered(processData);
+		}
+		return processData.allItems;
+	});
+}
+
+/**
+ * update list items on a meter so you dont get throttled
+ * url is a site relative url
+ * pass listGUID or listTitle not both
+ * updateInfo is an array of objects that contain the column data and item id to update
+ * ex [
+ * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
+ * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
+ * 		]
+ *
+ * column data should be passed as follows
+ * every columnInfo object must contain columnName
+ * if single tax field add termLabel and termGuid to column object
+ * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+ * if multi choice field add choices to column object, ['one','two','three']
+ * if single lookup field add itemId to column object, will contain id number
+ * if multi lookup field add idArray to column object, [1,2,3]
+ * if single person field add account to column object, account is email or account name
+ * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+ * if hyperlink field add url and description to column object
+ * if none of these match your column type then pass the data to be stored as columnValue
+ * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
+ * @returns {promise} 
+ */
+function jsomUpdateItemsMetered(props) {
+	var processData = null;
+
+	if (!props.configured) {
+		var defaults = {
+			totalPerTrip: 50,
+			numberToStartAt: 0,
+			totalItems: props.updateInfo.length,
+			allItems: [],
+			configured: true
+		};
+		processData = Object.assign({}, defaults, props);
+	} else {
+		processData = props;
+	}
+
+	var itemCreator = new jsomCUD(),
+	    index = processData.numberToStartAt;
+
+	for (index; index < processData.totalItems; index++) {
+		var current = processData.updateInfo[index];
+		itemCreator.updateItem(current.itemId, current.columnInfo);
+
+		var setupToCreate = itemCreator.totalRequests();
+		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
+			index++;
+			processData.numberToStartAt = index;
+			break;
+		}
+	}
+
+	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
+		var results = response.listItems;
+		processData.allItems = processData.allItems.concat(results);
+
+		if (processData.numberToStartAt < processData.totalItems) {
+			return jsomUpdateItemsMetered(processData);
+		}
+		return processData.allItems;
+	});
+}
 
 /***/ })
 /******/ ]);
