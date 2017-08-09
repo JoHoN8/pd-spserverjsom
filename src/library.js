@@ -1,5 +1,6 @@
 /**
 	app name pd-spserverjsom
+	requires a polyfill for Object.assign
  */
 import * as $ from 'jquery';
 import {
@@ -109,6 +110,13 @@ const fromSearchWorker = function(props) {
 			return props.allResults;
 		}
 	});
+};
+const depCheck = function() {
+	try {
+		let check = Object.assign;
+	} catch (error) {
+		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign. Please add to continue.");
+	}
 };
 
 /**
@@ -793,7 +801,7 @@ export function jsomCreateItemsMetered(props) {
 			allItems: [],
 			configured: true
 		};
-		processData = Object.assign({}, defaults, pros);
+		processData = Object.assign({}, defaults, props);
 	} else {
 		processData = props;
 	}
@@ -805,21 +813,23 @@ export function jsomCreateItemsMetered(props) {
 		
 		itemCreator.createItem(processData.columnInfo[index]);
 
-		if (itemCreator.totalRequests() === processData.totalPerTrip) {
+		let setupToCreate = itemCreator.totalRequests();
+		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
 			index++;
+			processData.numberToStartAt = index;
 			break;
 		}
 	}
 
-	return itemCreator.sendToSever(props.url, props.listGUID)
+	return itemCreator.sendToSever(processData.url, processData.listGUID)
 	.then(function(response) {
 		let results = response.listItems;
-		props.allItems = props.allItems.concat(results);
+		processData.allItems = processData.allItems.concat(results);
 
-		if (processData.numberToStartAt < props.totalItems) {
-			return jsomCreateItemsMetered(props);
+		if (processData.numberToStartAt < processData.totalItems) {
+			return jsomCreateItemsMetered(processData);
 		}
-		return props.allItems;
+		return processData.allItems;
 	});
 	
 }
@@ -868,24 +878,26 @@ export function jsomUpdateItemsMetered(props) {
 		index = processData.numberToStartAt;
 
 	for (index; index < processData.totalItems; index++) {
-		let current = props.updateInfo[index];
+		let current = processData.updateInfo[index];
 		itemCreator.updateItem(current.itemId, current.columnInfo);
 
-		if (itemCreator.totalRequests() === processData.totalPerTrip) {
+		let setupToCreate = itemCreator.totalRequests();
+		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
 			index++;
+			processData.numberToStartAt = index;
 			break;
 		}
 	}
 
-	return itemCreator.sendToSever(props.url, props.listGUID)
+	return itemCreator.sendToSever(processData.url, processData.listGUID)
 	.then(function(response) {
 		let results = response.listItems;
-		props.allItems = props.allItems.concat(results);
+		processData.allItems = processData.allItems.concat(results);
 
-		if (processData.numberToStartAt < props.totalItems) {
-			return jsomUpdateItemsMetered(props);
+		if (processData.numberToStartAt < processData.totalItems) {
+			return jsomUpdateItemsMetered(processData);
 		}
-		return props.allItems;
+		return processData.allItems;
 	});
 	
 }
