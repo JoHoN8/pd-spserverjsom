@@ -914,7 +914,7 @@ function jsomCreateItemsMetered(props) {
 		itemCreator.createItem(processData.columnInfo[index]);
 
 		var setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
+		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
 			processData.numberToStartAt = index;
 			break;
@@ -980,7 +980,7 @@ function jsomUpdateItemsMetered(props) {
 		itemCreator.updateItem(current.itemId, current.columnInfo);
 
 		var setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
+		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
 			processData.numberToStartAt = index;
 			break;
