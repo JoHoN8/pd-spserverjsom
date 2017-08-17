@@ -7,7 +7,8 @@ import {
 	loadSPScript,
 	validGuid,
 	waitForScriptsReady,
-	getDataType
+	getDataType,
+	sublish
 } from 'pd-sputil';
 
 const clearRequestDigest = function() {
@@ -780,48 +781,53 @@ export class jsomCUD{
  * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
  * @returns {promise} 
  */
-export function jsomCreateItemsMetered(props) {
-	let processData = null;
 
-	if (!props.configured) {
-		let defaults = {
+class jsomMeteredBase extends jsomCUD {
+	constructor(props) {
+		super();
+		this._notifier = new sublish();
+		this.processData = Object.assign({
 			totalPerTrip: 50,
 			numberToStartAt: 0,
-			totalItems: props.columnInfo.length,
 			allItems: [],
 			configured: true
-		};
-		processData = Object.assign({}, defaults, props);
-	} else {
-		processData = props;
+		}, props);
+
 	}
-
-	let itemCreator = new jsomCUD(),
-		index = processData.numberToStartAt;
-
-	for (index; index < processData.totalItems; index++) {
-		
-		itemCreator.createItem(processData.columnInfo[index]);
-
-		let setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
-			index++;
-			processData.numberToStartAt = index;
-			break;
-		}
-	}
-
-	return itemCreator.sendToSever(processData.url, processData.listGUID)
-	.then(function(response) {
-		let results = response.listItems;
-		processData.allItems = processData.allItems.concat(results);
-
-		if (processData.numberToStartAt < processData.totalItems) {
-			return jsomCreateItemsMetered(processData);
-		}
-		return processData.allItems;
-	});
+	sendData() {
+		this._prepData();
+		return this.sendToSever(this.processData.url, this.processData.listGUID)
+		.then(response => {
+			let results = response.listItems;
+			this.processData.allItems = this.processData.allItems.concat(results);
 	
+			if (this.processData.numberToStartAt < this.processData.totalItems) {
+				return this.sendData();
+			}
+			return this.processData.allItems;
+		});
+	}
+}
+
+export class jsomCreateItemsMetered extends jsomMeteredBase {
+	constructor(props) {
+		super(props);
+		this.processData.totalItems = props.columnInfo.length;
+	}
+	_prepData() {
+		let index = this.processData.numberToStartAt;
+		for (index; index < this.processData.totalItems; index++) {
+			
+			this.createItem(this.processData.columnInfo[index]);
+	
+			let setupToCreate = this.totalRequests();
+			if (setupToCreate === this.processData.totalPerTrip || setupToCreate === this.processData.totalItems) {
+				index++;
+				this.processData.numberToStartAt = index;
+				break;
+			}
+		}
+	}
 }
 
 /**
