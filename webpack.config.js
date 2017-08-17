@@ -41,9 +41,6 @@ if(env === 'test') {
         path: path.resolve(__dirname, "./tests"),
         filename: "spServerJsom_tests.js",
     };
-    //external['./src/library.js'] = "pdspserverjsom";
-    external.jquery = "jQuery";
-    //external['pd-sputil'] = "pdsputil";
 }
 
 module.exports = {
