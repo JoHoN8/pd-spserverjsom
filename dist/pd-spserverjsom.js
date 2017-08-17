@@ -1,13 +1,13 @@
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
-		module.exports = factory(require("jquery"), require("pd-sputil"));
+		module.exports = factory(require("pd-sputil"));
 	else if(typeof define === 'function' && define.amd)
-		define(["jquery", "pd-sputil"], factory);
+		define(["pd-sputil"], factory);
 	else if(typeof exports === 'object')
-		exports["pdspserverjsom"] = factory(require("jquery"), require("pd-sputil"));
+		exports["pdspserverjsom"] = factory(require("pd-sputil"));
 	else
-		root["pdspserverjsom"] = factory(root["$"], root["pdsputil"]);
-})(this, function(__WEBPACK_EXTERNAL_MODULE_1__, __WEBPACK_EXTERNAL_MODULE_2__) {
+		root["pdspserverjsom"] = factory(root["pdsputil"]);
+})(this, function(__WEBPACK_EXTERNAL_MODULE_1__) {
 return /******/ (function(modules) { // webpackBootstrap
 /******/ 	// The module cache
 /******/ 	var installedModules = {};
@@ -89,10 +89,8 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomCUD", function() { return jsomCUD; });
 /* harmony export (immutable) */ __webpack_exports__["jsomCreateItemsMetered"] = jsomCreateItemsMetered;
 /* harmony export (immutable) */ __webpack_exports__["jsomUpdateItemsMetered"] = jsomUpdateItemsMetered;
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery__ = __webpack_require__(1);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_jquery___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_jquery__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_pd_sputil__ = __webpack_require__(2);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_pd_sputil___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_pd_sputil__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_pd_sputil___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__);
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -101,7 +99,7 @@ function _classCallCheck(instance, Constructor) { if (!(instance instanceof Cons
 	app name pd-spserverjsom
 	requires a polyfill for Object.assign
  */
-
+/*global SP Microsoft Sys*/
 
 
 var clearRequestDigest = function clearRequestDigest() {
@@ -147,9 +145,9 @@ var fromSearchWorker = function fromSearchWorker(props) {
 	var currentResults = props.allResults || [];
 	var glob = Microsoft.SharePoint.Client;
 	if (glob && glob.Search) {
-		scriptCheck = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]().resolve();
+		scriptCheck = Promise.resolve();
 	} else {
-		scriptCheck = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["loadSPScript"])("SP.Search.js");
+		scriptCheck = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["loadSPScript"])("SP.Search.js");
 	}
 
 	return scriptCheck.then(function () {
@@ -204,9 +202,10 @@ var fromSearchWorker = function fromSearchWorker(props) {
 };
 var depCheck = function depCheck() {
 	try {
-		Object.assign;
+		var dep1 = Object.assign,
+		    dep2 = Promise;
 	} catch (error) {
-		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign. Please add to continue.");
+		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign and Promise. Please add both to continue.");
 	}
 };
 depCheck();
@@ -219,7 +218,7 @@ depCheck();
  * @returns {promise}
  */
 function jsomGetDataFromSearch(props) {
-	return Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+	return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
 		return fromSearchWorker(props);
 	});
 }
@@ -234,7 +233,7 @@ function jsomGetDataFromSearch(props) {
  */
 function jsomListItemRequest(props) {
 	//todo make this function recursive
-	return Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
+	return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 		    camlQuery = new SP.CamlQuery(),
@@ -286,11 +285,10 @@ function jsomListItemRequest(props) {
  */
 function jsomEnsureUser(url, user) {
 
-	var datatype = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(user),
+	var datatype = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["getDataType"])(user),
 	    startStringCheck = /^i:0#\.f\|membership\|/,
 	    verifiedUsers = [],
 	    usersToVerify,
-	    def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"](),
 	    context,
 	    userLogin,
 	    web,
@@ -323,7 +321,7 @@ function jsomEnsureUser(url, user) {
 		context.load(verifiedUsers[index]);
 	});
 
-	jsomSendDataToServer({
+	return jsomSendDataToServer({
 		context: context
 	}).then(function () {
 		var giveBackValue, userTemp;
@@ -339,12 +337,8 @@ function jsomEnsureUser(url, user) {
 			}
 		});
 		giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
-		def.resolve(giveBackValue);
-	}).fail(function () {
-		def.reject();
+		return giveBackValue;
 	});
-
-	return def.promise();
 }
 /**
  * Gets list items based on id
@@ -355,7 +349,7 @@ function jsomEnsureUser(url, user) {
  */
 function jsomGetItemsById(props) {
 
-	return Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
+	return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 		    currentResults = props.allResults || [],
@@ -417,7 +411,7 @@ function jsomGetItemsById(props) {
  */
 function jsomGetFilesByRelativeUrl(props) {
 
-	return Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
+	return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('SP.js').then(function () {
 
 		var clientContext = props.url ? new SP.ClientContext(props.url) : new SP.ClientContext.get_current(),
 		    web = clientContext.get_web(),
@@ -453,14 +447,14 @@ function jsomGetFilesByRelativeUrl(props) {
  */
 function jsomTaxonomyRequest(termStoreId, termSetId) {
 	//item.IsAvailableForTagging
-	return Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+	return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
 		var tax = void 0;
 
 		if (SP.Taxonomy) {
 			//already loaded
-			tax = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]().resolve();
+			tax = Promise.resolve();
 		} else {
-			tax = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["loadSPScript"])('sp.taxonomy.js');
+			tax = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["loadSPScript"])('sp.taxonomy.js');
 		}
 		return tax;
 	}).then(function () {
@@ -489,15 +483,15 @@ function jsomTaxonomyRequest(termStoreId, termSetId) {
  * @returns {promise}
  */
 function jsomSendDataToServer(serverData) {
-	var def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"]();
+	return new Promise(function (resolve, reject) {
 
-	serverData.context.executeQueryAsync(function () {
-		//success
-		def.resolve(serverData);
-	}, function () {
-		def.reject(arguments);
-	}); //end QueryAsync
-	return def.promise();
+		serverData.context.executeQueryAsync(function () {
+			//success
+			resolve(serverData);
+		}, function () {
+			reject(arguments);
+		}); //end QueryAsync
+	});
 }
 /**
  * Class that allows for batch create, update, recycle, delete
@@ -524,7 +518,7 @@ var jsomCUD = function () {
 	}, {
 		key: '_getList',
 		value: function _getList(listId) {
-			var isGuid = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["validGuid"])(listId);
+			var isGuid = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["validGuid"])(listId);
 
 			if (isGuid) {
 				this.list = this.context.get_web().get_lists().getById(listId);
@@ -808,7 +802,7 @@ var jsomCUD = function () {
 		value: function recycleItem(itemId) {
 			var _this4 = this;
 
-			var type = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(itemId);
+			var type = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["getDataType"])(itemId);
 
 			if (type === 'number') {
 				this._addItem('recycle', null, itemId);
@@ -832,7 +826,7 @@ var jsomCUD = function () {
 		value: function deleteItem(itemId) {
 			var _this5 = this;
 
-			var type = Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["getDataType"])(itemId);
+			var type = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["getDataType"])(itemId);
 
 			if (type === 'number') {
 				this._addItem('delete', null, itemId);
@@ -859,22 +853,14 @@ var jsomCUD = function () {
 		key: 'sendToSever',
 		value: function sendToSever(site, listId) {
 			//make sure everything is in place before doing process
-			var def = __WEBPACK_IMPORTED_MODULE_0_jquery__["Deferred"](),
-			    self = this;
-
-			Object(__WEBPACK_IMPORTED_MODULE_1_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+			var self = this;
+			return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
 				self.sp = SP;
 
 				self._getContext(site)._getList(listId)._createListItems();
 
 				return self._dataTranmitter();
-			}).then(function (response) {
-				def.resolve(response);
-			}).fail(function (data) {
-				def.reject(data);
 			});
-
-			return def.promise();
 		}
 	}]);
 
@@ -1017,12 +1003,6 @@ function jsomUpdateItemsMetered(props) {
 /***/ (function(module, exports) {
 
 module.exports = __WEBPACK_EXTERNAL_MODULE_1__;
-
-/***/ }),
-/* 2 */
-/***/ (function(module, exports) {
-
-module.exports = __WEBPACK_EXTERNAL_MODULE_2__;
 
 /***/ })
 /******/ ]);

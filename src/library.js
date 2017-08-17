@@ -2,7 +2,7 @@
 	app name pd-spserverjsom
 	requires a polyfill for Object.assign
  */
-import * as $ from 'jquery';
+/*global SP Microsoft Sys*/
 import {
 	loadSPScript,
 	validGuid,
@@ -57,7 +57,7 @@ const fromSearchWorker = function(props) {
 	let currentResults = props.allResults || [];
 	let glob = Microsoft.SharePoint.Client;
 	if(glob && glob.Search) {
-		scriptCheck = $.Deferred().resolve();
+		scriptCheck = Promise.resolve();
 	} else {
 		scriptCheck = loadSPScript("SP.Search.js");
 	}
@@ -113,9 +113,10 @@ const fromSearchWorker = function(props) {
 };
 const depCheck = function() {
 	try {
-		Object.assign;
+		var dep1 = Object.assign,
+			dep2 = Promise;
 	} catch (error) {
-		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign. Please add to continue.");
+		throw new Error("The pd-spserverjsom library requires a polyfill for Object.assign and Promise. Please add both to continue.");
 	}
 };
 depCheck();
@@ -203,7 +204,6 @@ export function jsomEnsureUser(url, user) {
 		startStringCheck = /^i:0#\.f\|membership\|/,
 		verifiedUsers = [],
 		usersToVerify,
-		def = $.Deferred(),
 		context,
 		userLogin,
 		web,
@@ -237,7 +237,7 @@ export function jsomEnsureUser(url, user) {
 		context.load(verifiedUsers[index]);
 	});
 
-	jsomSendDataToServer({
+	return jsomSendDataToServer({
 		context: context
 	}).then(function() {
 		var giveBackValue,
@@ -254,12 +254,8 @@ export function jsomEnsureUser(url, user) {
 			}
 		});
 		giveBackValue = datatype === '[object Object]' ? usersToVerify[0] : usersToVerify;
-		def.resolve(giveBackValue);
-	}).fail(function() {
-		def.reject();
+		return giveBackValue;
 	});
-
-	return def.promise();
 }
 /**
  * Gets list items based on id
@@ -376,7 +372,7 @@ export function jsomTaxonomyRequest(termStoreId, termSetId) {
 
 		if(SP.Taxonomy) {
 			//already loaded
-			tax = $.Deferred().resolve();
+			tax = Promise.resolve();
 		} else {
 			tax = loadSPScript('sp.taxonomy.js');
 		}
@@ -408,18 +404,19 @@ export function jsomTaxonomyRequest(termStoreId, termSetId) {
  * @returns {promise}
  */
 export function jsomSendDataToServer(serverData) {
-	var def = $.Deferred();
+	return new Promise((resolve, reject) => {
+
+		serverData.context.executeQueryAsync(
+			function() {
+				//success
+				resolve(serverData);
+			},
+			function() {
+				reject(arguments);
+			}
+		); //end QueryAsync
+	});
 			
-	serverData.context.executeQueryAsync(
-		function() {
-			//success
-			def.resolve(serverData);
-		},
-		function() {
-			def.reject(arguments);
-		}
-	); //end QueryAsync
-	return def.promise();
 }
 /**
  * Class that allows for batch create, update, recycle, delete
@@ -745,10 +742,8 @@ export class jsomCUD{
 	 */
 	sendToSever(site, listId) {
 		//make sure everything is in place before doing process
-		let def = $.Deferred(),
-			self = this;
-
-		waitForScriptsReady('sp.js')
+		let self = this;
+		return waitForScriptsReady('sp.js')
 		.then(() => {
 			self.sp = SP;
 
@@ -758,13 +753,7 @@ export class jsomCUD{
 			._createListItems();
 
 			return self._dataTranmitter();
-		}).then((response) => {
-			def.resolve(response);
-		}).fail((data) => {
-			def.reject(data);
 		});
-
-		return def.promise();
 	}
 }
 /**
