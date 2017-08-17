@@ -916,10 +916,10 @@ function jsomCreateItemsMetered(props) {
 		var setupToCreate = itemCreator.totalRequests();
 		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
-			processData.numberToStartAt = index;
 			break;
 		}
 	}
+	processData.numberToStartAt = index;
 
 	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
 		var results = response.listItems;
@@ -982,10 +982,10 @@ function jsomUpdateItemsMetered(props) {
 		var setupToCreate = itemCreator.totalRequests();
 		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
-			processData.numberToStartAt = index;
 			break;
 		}
 	}
+	processData.numberToStartAt = index;
 
 	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
 		var results = response.listItems;

@@ -806,10 +806,10 @@ export function jsomCreateItemsMetered(props) {
 		let setupToCreate = itemCreator.totalRequests();
 		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
-			processData.numberToStartAt = index;
 			break;
 		}
 	}
+	processData.numberToStartAt = index;
 
 	return itemCreator.sendToSever(processData.url, processData.listGUID)
 	.then(function(response) {
@@ -874,10 +874,10 @@ export function jsomUpdateItemsMetered(props) {
 		let setupToCreate = itemCreator.totalRequests();
 		if (setupToCreate === processData.totalPerTrip || index === processData.totalItems) {
 			index++;
-			processData.numberToStartAt = index;
 			break;
 		}
 	}
+	processData.numberToStartAt = index;
 
 	return itemCreator.sendToSever(processData.url, processData.listGUID)
 	.then(function(response) {
