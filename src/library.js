@@ -424,7 +424,10 @@ export function jsomSendDataToServer(serverData) {
  */
 export class jsomCUD{
 	constructor() {
+		//stores requests here before sent, pool
 		this.itemsToSend = [];
+
+		//this is where the total per trip amount goes
 		this.userRequests = [];
 	}
 	_getContext(site) {
@@ -794,8 +797,30 @@ class jsomMeteredBase extends jsomCUD {
 		}, props);
 
 	}
+	_loadData() {
+		//abstract function to be implimented on child class
+		throw new Error("must impliment abtract loadData");
+	}
+	_meterPrep() {
+		if (this.userRequests.length > 0) {
+			//this is for recursion, it blanks out the last requests that were sent
+			this.userRequests = [];
+		}
+		let index = this.processData.numberToStartAt;
+		for (index; index < this.processData.totalItems; index++) {
+			
+			this._loadData(index);
+	
+			let setupToCreate = this.totalRequests();
+			if (setupToCreate === this.processData.totalPerTrip || index === this.processData.totalItems) {
+				index++;
+				break;
+			}
+			this.processData.numberToStartAt = index;
+		}
+	}
 	sendData() {
-		this._prepData();
+		this._meterPrep();
 		return this.sendToSever(this.processData.url, this.processData.listGUID)
 		.then(response => {
 			let results = response.listItems;
@@ -814,19 +839,8 @@ export class jsomCreateItemsMetered extends jsomMeteredBase {
 		super(props);
 		this.processData.totalItems = props.columnInfo.length;
 	}
-	_prepData() {
-		let index = this.processData.numberToStartAt;
-		for (index; index < this.processData.totalItems; index++) {
-			
-			this.createItem(this.processData.columnInfo[index]);
-	
-			let setupToCreate = this.totalRequests();
-			if (setupToCreate === this.processData.totalPerTrip || setupToCreate === this.processData.totalItems) {
-				index++;
-				this.processData.numberToStartAt = index;
-				break;
-			}
-		}
+	_loadData(index) {
+		this.createItem(this.processData.columnInfo[index]);
 	}
 }
 
@@ -854,47 +868,14 @@ export class jsomCreateItemsMetered extends jsomMeteredBase {
  * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
  * @returns {promise} 
  */
-export function jsomUpdateItemsMetered(props) {
-	let processData = null;
-
-	if (!props.configured) {
-		let defaults = {
-			totalPerTrip: 50,
-			numberToStartAt: 0,
-			totalItems: props.updateInfo.length,
-			allItems: [],
-			configured: true
-		};
-		processData = Object.assign({}, defaults, props);
-	} else {
-		processData = props;
+export class jsomUpdateItemsMetered extends jsomMeteredBase {
+	constructor(props) {
+		super(props);
+		this.processData.totalItems = props.updateInfo.length;
 	}
-
-	let itemCreator = new jsomCUD(),
-		index = processData.numberToStartAt;
-
-	for (index; index < processData.totalItems; index++) {
-		let current = processData.updateInfo[index];
-		itemCreator.updateItem(current.itemId, current.columnInfo);
-
-		let setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
-			index++;
-			processData.numberToStartAt = index;
-			break;
-		}
+	_loadData(index) {
+		let current = this.processData.updateInfo[index];
+		this.updateItem(current.itemId, current.columnInfo);
 	}
-
-	return itemCreator.sendToSever(processData.url, processData.listGUID)
-	.then(function(response) {
-		let results = response.listItems;
-		processData.allItems = processData.allItems.concat(results);
-
-		if (processData.numberToStartAt < processData.totalItems) {
-			return jsomUpdateItemsMetered(processData);
-		}
-		return processData.allItems;
-	});
-	
 }
 
