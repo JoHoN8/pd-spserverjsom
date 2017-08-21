@@ -429,6 +429,8 @@ export class jsomCUD{
 
 		//this is where the total per trip amount goes
 		this.userRequests = [];
+
+		this._SP_Loaded = waitForScriptsReady('sp.js');
 	}
 	_getContext(site) {
 
@@ -747,7 +749,8 @@ export class jsomCUD{
 	sendToSever(site, listId) {
 		//make sure everything is in place before doing process
 		let self = this;
-		return waitForScriptsReady('sp.js')
+		
+		return this._SP_Loaded
 		.then(() => {
 			self.sp = SP;
 
@@ -760,35 +763,10 @@ export class jsomCUD{
 		});
 	}
 }
-/**
- * Create list items on a meter so you dont get throttled
- * url is a site relative url
- * pass listGUID or listTitle not both
- * columnInfo is an array of arrays. the inner array contains 
- * objects that contain the column data to create the list item
- * ex. [
- * 		[{columnName: "some", columnValue: 3}], <--1 item created
- * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
- * 		]
- * column data should be passed as follows
- * every columnInfo object must contain columnName
- * if single tax field add termLabel and termGuid to column object
- * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
- * if multi choice field add choices to column object, ['one','two','three']
- * if single lookup field add itemId to column object, will contain id number
- * if multi lookup field add idArray to column object, [1,2,3]
- * if single person field add account to column object, account is email or account name
- * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
- * if hyperlink field add url and description to column object
- * if none of these match your column type then pass the data to be stored as columnValue
- * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
- * @returns {promise} 
- */
-
 class jsomMeteredBase extends jsomCUD {
 	constructor(props) {
 		super();
-		this._notifier = new sublish();
+		this.notifier = new sublish();
 		this.processData = Object.assign({
 			totalPerTrip: 50,
 			numberToStartAt: 0,
@@ -806,6 +784,7 @@ class jsomMeteredBase extends jsomCUD {
 			//this is for recursion, it blanks out the last requests that were sent
 			this.userRequests = [];
 		}
+		this.notifier.publish("preTrip", this.processData);
 		let index = this.processData.numberToStartAt;
 		for (index; index < this.processData.totalItems; index++) {
 			
@@ -816,15 +795,22 @@ class jsomMeteredBase extends jsomCUD {
 				index++;
 				break;
 			}
-			this.processData.numberToStartAt = index;
 		}
+		this.processData.numberToStartAt = index;
 	}
+	/**
+	 * sends data to server
+	 * 
+	 *  * @returns {promise} 
+	 */
 	sendData() {
+		
 		this._meterPrep();
 		return this.sendToSever(this.processData.url, this.processData.listGUID)
 		.then(response => {
 			let results = response.listItems;
 			this.processData.allItems = this.processData.allItems.concat(results);
+			this.notifier.publish("postTrip", this.processData);
 	
 			if (this.processData.numberToStartAt < this.processData.totalItems) {
 				return this.sendData();
@@ -833,8 +819,34 @@ class jsomMeteredBase extends jsomCUD {
 		});
 	}
 }
-
+/**
+ * Create list items on a meter so you dont get throttled
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
+ */
 export class jsomCreateItemsMetered extends jsomMeteredBase {
+	/**
+	 *  * url is a site relative url
+	 * pass listGUID or listTitle not both
+	 * columnInfo is an array of arrays. the inner array contains 
+	 * objects that contain the column data to create the list item
+	 * ex. [
+	 * 		[{columnName: "some", columnValue: 3}], <--1 item created
+	 * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
+	 * 		]
+	 * column data should be passed as follows
+	 * every columnInfo object must contain columnName
+	 * if single tax field add termLabel and termGuid to column object
+	 * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+	 * if multi choice field add choices to column object, ['one','two','three']
+	 * if single lookup field add itemId to column object, will contain id number
+	 * if multi lookup field add idArray to column object, [1,2,3]
+	 * if single person field add account to column object, account is email or account name
+	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+	 * if hyperlink field add url and description to column object
+	 * if none of these match your column type then pass the data to be stored as columnValue
+ 	 * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+	 */
 	constructor(props) {
 		super(props);
 		this.processData.totalItems = props.columnInfo.length;
@@ -843,32 +855,35 @@ export class jsomCreateItemsMetered extends jsomMeteredBase {
 		this.createItem(this.processData.columnInfo[index]);
 	}
 }
-
 /**
- * update list items on a meter so you dont get throttled
- * url is a site relative url
- * pass listGUID or listTitle not both
- * updateInfo is an array of objects that contain the column data and item id to update
- * ex [
- * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
- * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
- * 		]
- *
- * column data should be passed as follows
- * every columnInfo object must contain columnName
- * if single tax field add termLabel and termGuid to column object
- * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
- * if multi choice field add choices to column object, ['one','two','three']
- * if single lookup field add itemId to column object, will contain id number
- * if multi lookup field add idArray to column object, [1,2,3]
- * if single person field add account to column object, account is email or account name
- * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
- * if hyperlink field add url and description to column object
- * if none of these match your column type then pass the data to be stored as columnValue
- * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
- * @returns {promise} 
+ * Update list items on a meter so you dont get throttled
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
  */
 export class jsomUpdateItemsMetered extends jsomMeteredBase {
+	/**
+	 * update list items on a meter so you dont get throttled
+	 * url is a site relative url
+	 * pass listGUID or listTitle not both
+	 * updateInfo is an array of objects that contain the column data and item id to update
+	 * ex [
+	 * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
+	 * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
+	 * 		]
+	 *
+	 * column data should be passed as follows
+	 * every columnInfo object must contain columnName
+	 * if single tax field add termLabel and termGuid to column object
+	 * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+	 * if multi choice field add choices to column object, ['one','two','three']
+	 * if single lookup field add itemId to column object, will contain id number
+	 * if multi lookup field add idArray to column object, [1,2,3]
+	 * if single person field add account to column object, account is email or account name
+	 * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+	 * if hyperlink field add url and description to column object
+	 * if none of these match your column type then pass the data to be stored as columnValue
+	 * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
+	 */
 	constructor(props) {
 		super(props);
 		this.processData.totalItems = props.updateInfo.length;
@@ -876,6 +891,28 @@ export class jsomUpdateItemsMetered extends jsomMeteredBase {
 	_loadData(index) {
 		let current = this.processData.updateInfo[index];
 		this.updateItem(current.itemId, current.columnInfo);
+	}
+}
+/**
+ * Recycle list items on a meter so you dont get throttled
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
+ */
+export class jsomRecycleItemsMetered extends jsomMeteredBase {
+	/**
+	  * url is a site relative url
+	 * pass listGUID or listTitle not both
+	 * recycleIds is an array of Id's. 
+	 * ex. [2,3,4,5,14]
+	 * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+	 * @param {{url:string, listGUID:string, listTitle:string, recycleIds:object[]}} props
+	 */
+	constructor(props) {
+		super(props);
+		this.processData.totalItems = props.recycleIds.length;
+	}
+	_loadData(index) {
+		this.recycleItem(this.processData.recycleIds[index]);
 	}
 }
 

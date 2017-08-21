@@ -36,7 +36,7 @@ if(env === 'build') {
     plugins.push(new UglifyJsPlugin({ minimize: true }));
 }
 if(env === 'test') {
-    entryPoint = './project_tests.js';
+    entryPoint = './tests/project_tests.js';
     output = {
         path: path.resolve(__dirname, "./tests"),
         filename: "spServerJsom_tests.js",
@@ -55,7 +55,8 @@ module.exports = {
                     loader: 'babel-loader',
                     options: {
                         presets: [
-                             ['es2015', {modules: false}]
+                             ['es2015', {modules: false}],
+                             "stage-0"
                         ]
                     }
                 }
