@@ -991,6 +991,7 @@ var jsomCreateItemsMetered = function (_jsomMeteredBase) {
 		_this8.processData.totalItems = props.columnInfo.length;
 		return _this8;
 	}
+	processData.numberToStartAt = index;
 
 	_createClass(jsomCreateItemsMetered, [{
 		key: '_loadData',
@@ -1075,6 +1076,7 @@ var jsomRecycleItemsMetered = function (_jsomMeteredBase3) {
 		_this10.processData.totalItems = props.recycleIds.length;
 		return _this10;
 	}
+	processData.numberToStartAt = index;
 
 	_createClass(jsomRecycleItemsMetered, [{
 		key: '_loadData',
