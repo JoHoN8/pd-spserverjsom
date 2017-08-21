@@ -87,11 +87,16 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (immutable) */ __webpack_exports__["jsomTaxonomyRequest"] = jsomTaxonomyRequest;
 /* harmony export (immutable) */ __webpack_exports__["jsomSendDataToServer"] = jsomSendDataToServer;
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomCUD", function() { return jsomCUD; });
-/* harmony export (immutable) */ __webpack_exports__["jsomCreateItemsMetered"] = jsomCreateItemsMetered;
-/* harmony export (immutable) */ __webpack_exports__["jsomUpdateItemsMetered"] = jsomUpdateItemsMetered;
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomCreateItemsMetered", function() { return jsomCreateItemsMetered; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomUpdateItemsMetered", function() { return jsomUpdateItemsMetered; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "jsomRecycleItemsMetered", function() { return jsomRecycleItemsMetered; });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_pd_sputil__ = __webpack_require__(1);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_pd_sputil___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__);
 var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+function _possibleConstructorReturn(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
@@ -500,8 +505,13 @@ var jsomCUD = function () {
 	function jsomCUD() {
 		_classCallCheck(this, jsomCUD);
 
+		//stores requests here before sent, pool
 		this.itemsToSend = [];
+
+		//this is where the total per trip amount goes
 		this.userRequests = [];
+
+		this._SP_Loaded = Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('sp.js');
 	}
 
 	_createClass(jsomCUD, [{
@@ -854,7 +864,8 @@ var jsomCUD = function () {
 		value: function sendToSever(site, listId) {
 			//make sure everything is in place before doing process
 			var self = this;
-			return Object(__WEBPACK_IMPORTED_MODULE_0_pd_sputil__["waitForScriptsReady"])('sp.js').then(function () {
+
+			return this._SP_Loaded.then(function () {
 				self.sp = SP;
 
 				self._getContext(site)._getList(listId)._createListItems();
@@ -866,137 +877,214 @@ var jsomCUD = function () {
 
 	return jsomCUD;
 }();
+
+var jsomMeteredBase = function (_jsomCUD) {
+	_inherits(jsomMeteredBase, _jsomCUD);
+
+	function jsomMeteredBase(props) {
+		_classCallCheck(this, jsomMeteredBase);
+
+		var _this6 = _possibleConstructorReturn(this, (jsomMeteredBase.__proto__ || Object.getPrototypeOf(jsomMeteredBase)).call(this));
+
+		_this6.notifier = new __WEBPACK_IMPORTED_MODULE_0_pd_sputil__["sublish"]();
+		_this6.processData = Object.assign({
+			totalPerTrip: 50,
+			numberToStartAt: 0,
+			allItems: [],
+			configured: true
+		}, props);
+
+		return _this6;
+	}
+
+	_createClass(jsomMeteredBase, [{
+		key: '_loadData',
+		value: function _loadData() {
+			//abstract function to be implimented on child class
+			throw new Error("must impliment abtract loadData");
+		}
+	}, {
+		key: '_meterPrep',
+		value: function _meterPrep() {
+			if (this.userRequests.length > 0) {
+				//this is for recursion, it blanks out the last requests that were sent
+				this.userRequests = [];
+			}
+			this.notifier.publish("preTrip", this.processData);
+			var index = this.processData.numberToStartAt;
+			for (index; index < this.processData.totalItems; index++) {
+
+				this._loadData(index);
+
+				var setupToCreate = this.totalRequests();
+				if (setupToCreate === this.processData.totalPerTrip || index === this.processData.totalItems) {
+					index++;
+					break;
+				}
+			}
+			this.processData.numberToStartAt = index;
+		}
+		/**
+   * sends data to server
+   * 
+   *  * @returns {promise} 
+   */
+
+	}, {
+		key: 'sendData',
+		value: function sendData() {
+			var _this7 = this;
+
+			this._meterPrep();
+			return this.sendToSever(this.processData.url, this.processData.listGUID).then(function (response) {
+				var results = response.listItems;
+				_this7.processData.allItems = _this7.processData.allItems.concat(results);
+				_this7.notifier.publish("postTrip", _this7.processData);
+
+				if (_this7.processData.numberToStartAt < _this7.processData.totalItems) {
+					return _this7.sendData();
+				}
+				return _this7.processData.allItems;
+			});
+		}
+	}]);
+
+	return jsomMeteredBase;
+}(jsomCUD);
 /**
  * Create list items on a meter so you dont get throttled
- * url is a site relative url
- * pass listGUID or listTitle not both
- * columnInfo is an array of arrays. the inner array contains 
- * objects that contain the column data to create the list item
- * ex. [
- * 		[{columnName: "some", columnValue: 3}], <--1 item created
- * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
- * 		]
- * column data should be passed as follows
- * every columnInfo object must contain columnName
- * if single tax field add termLabel and termGuid to column object
- * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
- * if multi choice field add choices to column object, ['one','two','three']
- * if single lookup field add itemId to column object, will contain id number
- * if multi lookup field add idArray to column object, [1,2,3]
- * if single person field add account to column object, account is email or account name
- * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
- * if hyperlink field add url and description to column object
- * if none of these match your column type then pass the data to be stored as columnValue
- * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
- * @returns {promise} 
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
  */
-function jsomCreateItemsMetered(props) {
-	var processData = null;
 
-	if (!props.configured) {
-		var defaults = {
-			totalPerTrip: 50,
-			numberToStartAt: 0,
-			totalItems: props.columnInfo.length,
-			allItems: [],
-			configured: true
-		};
-		processData = Object.assign({}, defaults, props);
-	} else {
-		processData = props;
+
+var jsomCreateItemsMetered = function (_jsomMeteredBase) {
+	_inherits(jsomCreateItemsMetered, _jsomMeteredBase);
+
+	/**
+  *  * url is a site relative url
+  * pass listGUID or listTitle not both
+  * columnInfo is an array of arrays. the inner array contains 
+  * objects that contain the column data to create the list item
+  * ex. [
+  * 		[{columnName: "some", columnValue: 3}], <--1 item created
+  * 		[{columnName: "something", columnValue: 8}] <-- 2 item created
+  * 		]
+  * column data should be passed as follows
+  * every columnInfo object must contain columnName
+  * if single tax field add termLabel and termGuid to column object
+  * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+  * if multi choice field add choices to column object, ['one','two','three']
+  * if single lookup field add itemId to column object, will contain id number
+  * if multi lookup field add idArray to column object, [1,2,3]
+  * if single person field add account to column object, account is email or account name
+  * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+  * if hyperlink field add url and description to column object
+  * if none of these match your column type then pass the data to be stored as columnValue
+ 	 * @param {{url:string, listGUID:string, listTitle:string, columnInfo:object[]}} props
+  */
+	function jsomCreateItemsMetered(props) {
+		_classCallCheck(this, jsomCreateItemsMetered);
+
+		var _this8 = _possibleConstructorReturn(this, (jsomCreateItemsMetered.__proto__ || Object.getPrototypeOf(jsomCreateItemsMetered)).call(this, props));
+
+		_this8.processData.totalItems = props.columnInfo.length;
+		return _this8;
 	}
 
-	var itemCreator = new jsomCUD(),
-	    index = processData.numberToStartAt;
-
-	for (index; index < processData.totalItems; index++) {
-
-		itemCreator.createItem(processData.columnInfo[index]);
-
-		var setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
-			index++;
-			processData.numberToStartAt = index;
-			break;
+	_createClass(jsomCreateItemsMetered, [{
+		key: '_loadData',
+		value: function _loadData(index) {
+			this.createItem(this.processData.columnInfo[index]);
 		}
-	}
+	}]);
 
-	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
-		var results = response.listItems;
-		processData.allItems = processData.allItems.concat(results);
-
-		if (processData.numberToStartAt < processData.totalItems) {
-			return jsomCreateItemsMetered(processData);
-		}
-		return processData.allItems;
-	});
-}
-
+	return jsomCreateItemsMetered;
+}(jsomMeteredBase);
 /**
- * update list items on a meter so you dont get throttled
- * url is a site relative url
- * pass listGUID or listTitle not both
- * updateInfo is an array of objects that contain the column data and item id to update
- * ex [
- * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
- * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
- * 		]
- *
- * column data should be passed as follows
- * every columnInfo object must contain columnName
- * if single tax field add termLabel and termGuid to column object
- * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
- * if multi choice field add choices to column object, ['one','two','three']
- * if single lookup field add itemId to column object, will contain id number
- * if multi lookup field add idArray to column object, [1,2,3]
- * if single person field add account to column object, account is email or account name
- * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
- * if hyperlink field add url and description to column object
- * if none of these match your column type then pass the data to be stored as columnValue
- * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
- * @returns {promise} 
+ * Update list items on a meter so you dont get throttled
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
  */
-function jsomUpdateItemsMetered(props) {
-	var processData = null;
+var jsomUpdateItemsMetered = function (_jsomMeteredBase2) {
+	_inherits(jsomUpdateItemsMetered, _jsomMeteredBase2);
 
-	if (!props.configured) {
-		var defaults = {
-			totalPerTrip: 50,
-			numberToStartAt: 0,
-			totalItems: props.updateInfo.length,
-			allItems: [],
-			configured: true
-		};
-		processData = Object.assign({}, defaults, props);
-	} else {
-		processData = props;
+	/**
+  * update list items on a meter so you dont get throttled
+  * url is a site relative url
+  * pass listGUID or listTitle not both
+  * updateInfo is an array of objects that contain the column data and item id to update
+  * ex [
+  * 		{itemId: 3, columnInfo: [{columnName: "col1", columnValue: "uuumm"}]}
+  * 		{itemId: 5, columnInfo: [{columnName: "col3", columnValue: "woohoo"}]}
+  * 		]
+  *
+  * column data should be passed as follows
+  * every columnInfo object must contain columnName
+  * if single tax field add termLabel and termGuid to column object
+  * if multi tax field add multiTerms to column object, [{termLabel: '', termGuid: ''}, {termLabel: '', termGuid: ''}]
+  * if multi choice field add choices to column object, ['one','two','three']
+  * if single lookup field add itemId to column object, will contain id number
+  * if multi lookup field add idArray to column object, [1,2,3]
+  * if single person field add account to column object, account is email or account name
+  * if multi person field add accountArray to column object, [someone@onmicrosoft.com, someone2@onmicrosoft.com]
+  * if hyperlink field add url and description to column object
+  * if none of these match your column type then pass the data to be stored as columnValue
+  * @param {{url:string, listGUID:string, listTitle:string, updateInfo:object[]}} props
+  */
+	function jsomUpdateItemsMetered(props) {
+		_classCallCheck(this, jsomUpdateItemsMetered);
+
+		var _this9 = _possibleConstructorReturn(this, (jsomUpdateItemsMetered.__proto__ || Object.getPrototypeOf(jsomUpdateItemsMetered)).call(this, props));
+
+		_this9.processData.totalItems = props.updateInfo.length;
+		return _this9;
 	}
 
-	var itemCreator = new jsomCUD(),
-	    index = processData.numberToStartAt;
-
-	for (index; index < processData.totalItems; index++) {
-		var current = processData.updateInfo[index];
-		itemCreator.updateItem(current.itemId, current.columnInfo);
-
-		var setupToCreate = itemCreator.totalRequests();
-		if (setupToCreate === processData.totalPerTrip || setupToCreate === processData.totalItems) {
-			index++;
-			processData.numberToStartAt = index;
-			break;
+	_createClass(jsomUpdateItemsMetered, [{
+		key: '_loadData',
+		value: function _loadData(index) {
+			var current = this.processData.updateInfo[index];
+			this.updateItem(current.itemId, current.columnInfo);
 		}
+	}]);
+
+	return jsomUpdateItemsMetered;
+}(jsomMeteredBase);
+/**
+ * Recycle list items on a meter so you dont get throttled
+ * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+ * both events get passed props for the trip
+ */
+var jsomRecycleItemsMetered = function (_jsomMeteredBase3) {
+	_inherits(jsomRecycleItemsMetered, _jsomMeteredBase3);
+
+	/**
+   * url is a site relative url
+  * pass listGUID or listTitle not both
+  * recycleIds is an array of Id's. 
+  * ex. [2,3,4,5,14]
+  * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
+  * @param {{url:string, listGUID:string, listTitle:string, recycleIds:object[]}} props
+  */
+	function jsomRecycleItemsMetered(props) {
+		_classCallCheck(this, jsomRecycleItemsMetered);
+
+		var _this10 = _possibleConstructorReturn(this, (jsomRecycleItemsMetered.__proto__ || Object.getPrototypeOf(jsomRecycleItemsMetered)).call(this, props));
+
+		_this10.processData.totalItems = props.recycleIds.length;
+		return _this10;
 	}
 
-	return itemCreator.sendToSever(processData.url, processData.listGUID).then(function (response) {
-		var results = response.listItems;
-		processData.allItems = processData.allItems.concat(results);
-
-		if (processData.numberToStartAt < processData.totalItems) {
-			return jsomUpdateItemsMetered(processData);
+	_createClass(jsomRecycleItemsMetered, [{
+		key: '_loadData',
+		value: function _loadData(index) {
+			this.recycleItem(this.processData.recycleIds[index]);
 		}
-		return processData.allItems;
-	});
-}
+	}]);
+
+	return jsomRecycleItemsMetered;
+}(jsomMeteredBase);
 
 /***/ }),
 /* 1 */
