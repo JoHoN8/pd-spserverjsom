@@ -8,7 +8,7 @@ import {
 	validGuid,
 	waitForScriptsReady,
 	getDataType,
-	sublish
+	Sublish
 } from 'pd-sputil';
 
 const clearRequestDigest = function() {
@@ -766,7 +766,7 @@ export class jsomCUD{
 class jsomMeteredBase extends jsomCUD {
 	constructor(props) {
 		super();
-		this.notifier = new sublish();
+		this.notifier = new Sublish();
 		this.processData = Object.assign({
 			totalPerTrip: 50,
 			numberToStartAt: 0,
