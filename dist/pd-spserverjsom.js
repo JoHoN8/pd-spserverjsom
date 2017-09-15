@@ -886,7 +886,7 @@ var jsomMeteredBase = function (_jsomCUD) {
 
 		var _this6 = _possibleConstructorReturn(this, (jsomMeteredBase.__proto__ || Object.getPrototypeOf(jsomMeteredBase)).call(this));
 
-		_this6.notifier = new __WEBPACK_IMPORTED_MODULE_0_pd_sputil__["sublish"]();
+		_this6.notifier = new __WEBPACK_IMPORTED_MODULE_0_pd_sputil__["Sublish"]();
 		_this6.processData = Object.assign({
 			totalPerTrip: 50,
 			numberToStartAt: 0,
@@ -991,7 +991,6 @@ var jsomCreateItemsMetered = function (_jsomMeteredBase) {
 		_this8.processData.totalItems = props.columnInfo.length;
 		return _this8;
 	}
-	processData.numberToStartAt = index;
 
 	_createClass(jsomCreateItemsMetered, [{
 		key: '_loadData',
@@ -1076,7 +1075,6 @@ var jsomRecycleItemsMetered = function (_jsomMeteredBase3) {
 		_this10.processData.totalItems = props.recycleIds.length;
 		return _this10;
 	}
-	processData.numberToStartAt = index;
 
 	_createClass(jsomRecycleItemsMetered, [{
 		key: '_loadData',
