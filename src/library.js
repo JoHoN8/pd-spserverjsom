@@ -905,7 +905,7 @@ export class jsomRecycleItemsMetered extends jsomMeteredBase {
 	 * recycleIds is an array of Id's. 
 	 * ex. [2,3,4,5,14]
 	 * 2 events can be subscribed preTrip and postTrip, these give the ability to do actions as metered is running
-	 * @param {{url:string, listGUID:string, listTitle:string, recycleIds:object[]}} props
+	 * @param {{url:string, listGUID:string, listTitle:string, recycleIds:number[]}} props
 	 */
 	constructor(props) {
 		super(props);
